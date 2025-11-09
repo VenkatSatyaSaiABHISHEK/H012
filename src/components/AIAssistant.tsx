@@ -26,7 +26,7 @@ import {
   Lightbulb,
   TrendingUp,
   Security,
-  EcoMode,
+  Nature,
   Schedule,
   Warning,
   CheckCircle,
@@ -95,9 +95,9 @@ export const AIAssistant: React.FC<AIAssistantProps> = ({ open, onClose }) => {
     try {
       // Simulate AI response (replace with real OpenAI API call)
       await new Promise(resolve => setTimeout(resolve, 1500));
-      
+
       const aiResponse = generateSmartResponse(inputMessage);
-      
+
       const assistantMessage: AIResponse = {
         id: (Date.now() + 1).toString(),
         type: 'assistant',
@@ -123,7 +123,7 @@ export const AIAssistant: React.FC<AIAssistantProps> = ({ open, onClose }) => {
 
   const generateSmartResponse = (input: string): { message: string; suggestions?: string[] } => {
     const lowerInput = input.toLowerCase();
-    
+
     if (lowerInput.includes('energy') || lowerInput.includes('cost') || lowerInput.includes('power')) {
       return {
         message: "⚡ **Energy Optimization Analysis:**\n\n• **Current Status**: Your devices are consuming ~180W average\n• **Peak Hours**: 7-9 PM (higher electricity rates)\n• **Recommendation**: Shift non-critical devices to off-peak hours (11 PM - 6 AM)\n• **Potential Savings**: $15-25/month\n\n**Smart Actions:**\n- Auto-schedule water heater for off-peak hours\n- Reduce standby power consumption\n- Enable smart thermostat learning mode",
@@ -135,7 +135,7 @@ export const AIAssistant: React.FC<AIAssistantProps> = ({ open, onClose }) => {
         ]
       };
     }
-    
+
     if (lowerInput.includes('schedule') || lowerInput.includes('automat') || lowerInput.includes('routine')) {
       return {
         message: "📅 **Smart Automation Suggestions:**\n\n• **Morning Routine**: Lights on at 6:30 AM, coffee maker starts 6:45 AM\n• **Evening Routine**: Security system armed at 11 PM, non-essential devices off\n• **Away Mode**: All lights off, thermostat to eco mode, security cameras active\n• **Weather-Based**: Sprinkler system adjusts based on rain forecast\n\n**Advanced Features:**\n- Voice control integration\n- Geofencing triggers\n- Seasonal adjustments",
@@ -147,7 +147,7 @@ export const AIAssistant: React.FC<AIAssistantProps> = ({ open, onClose }) => {
         ]
       };
     }
-    
+
     if (lowerInput.includes('security') || lowerInput.includes('safe') || lowerInput.includes('monitor')) {
       return {
         message: "🔒 **Security Analysis & Recommendations:**\n\n• **Current Status**: 3 devices with security features active\n• **Vulnerabilities**: 2 devices need firmware updates\n• **Network Security**: WPA3 encryption recommended\n\n**Action Items:**\n- Enable 2FA on all smart devices\n- Set up unusual activity alerts\n- Create backup access codes\n- Regular security audits scheduled",
@@ -159,7 +159,7 @@ export const AIAssistant: React.FC<AIAssistantProps> = ({ open, onClose }) => {
         ]
       };
     }
-    
+
     if (lowerInput.includes('usage') || lowerInput.includes('pattern') || lowerInput.includes('analytic')) {
       return {
         message: "📊 **Usage Pattern Analysis:**\n\n• **Most Active**: Living room devices (60% daily usage)\n• **Peak Usage**: 7-9 PM weekdays, 2-6 PM weekends\n• **Efficiency Score**: 73/100 (Good, can improve)\n• **Trends**: 12% increase in usage this month\n\n**Insights:**\n- Kitchen appliances run during peak hours (expensive)\n- HVAC system could be more efficient\n- Some devices left on standby unnecessarily",
@@ -171,7 +171,7 @@ export const AIAssistant: React.FC<AIAssistantProps> = ({ open, onClose }) => {
         ]
       };
     }
-    
+
     // Default helpful response
     return {
       message: "🤖 I understand you're looking for help with your smart home system. Here are some areas where I can provide intelligent assistance:\n\n• **Energy Management**: Reduce costs and optimize consumption\n• **Automation**: Create smart schedules and routines\n• **Security**: Monitor and protect your devices\n• **Analytics**: Understand your usage patterns\n• **Troubleshooting**: Solve device connectivity issues\n\nWhat specific aspect would you like me to help with?",
@@ -200,11 +200,11 @@ export const AIAssistant: React.FC<AIAssistantProps> = ({ open, onClose }) => {
         <DialogContent>
           <Alert severity="info" sx={{ mb: 3 }}>
             <Typography variant="body2">
-              To enable AI-powered smart home assistance, you need an OpenAI API key. 
+              To enable AI-powered smart home assistance, you need an OpenAI API key.
               This will unlock intelligent automation suggestions, energy optimization, and natural language device control.
             </Typography>
           </Alert>
-          
+
           <TextField
             fullWidth
             label="OpenAI API Key"
@@ -215,7 +215,7 @@ export const AIAssistant: React.FC<AIAssistantProps> = ({ open, onClose }) => {
             helperText="Get your API key from https://platform.openai.com/api-keys"
             sx={{ mb: 2 }}
           />
-          
+
           <Typography variant="body2" color="text.secondary">
             <strong>AI Assistant Features:</strong><br />
             • Smart energy optimization recommendations<br />
@@ -255,7 +255,7 @@ export const AIAssistant: React.FC<AIAssistantProps> = ({ open, onClose }) => {
         <Box sx={{ height: 400, overflow: 'auto', mb: 2 }}>
           {messages.map((message) => (
             <Box key={message.id} sx={{ mb: 2 }}>
-              <Card sx={{ 
+              <Card sx={{
                 bgcolor: message.type === 'user' ? 'primary.main' : 'background.paper',
                 color: message.type === 'user' ? 'primary.contrastText' : 'text.primary',
                 ml: message.type === 'user' ? 4 : 0,
@@ -264,14 +264,14 @@ export const AIAssistant: React.FC<AIAssistantProps> = ({ open, onClose }) => {
                 <CardContent sx={{ py: 1.5, '&:last-child': { pb: 1.5 } }}>
                   <Box display="flex" alignItems="center" gap={1} mb={1}>
                     {message.type === 'assistant' && <SmartToy fontSize="small" />}
-                    <Typography variant="caption" opacity={0.8}>
+                    <Typography variant="caption" sx={{ opacity: 0.8 }}>
                       {message.type === 'assistant' ? 'AI Assistant' : 'You'} • {message.timestamp.toLocaleTimeString()}
                     </Typography>
                   </Box>
                   <Typography variant="body2" sx={{ whiteSpace: 'pre-line' }}>
                     {message.message}
                   </Typography>
-                  
+
                   {message.suggestions && (
                     <Box sx={{ mt: 2, display: 'flex', gap: 1, flexWrap: 'wrap' }}>
                       {message.suggestions.map((suggestion, index) => (
@@ -290,7 +290,7 @@ export const AIAssistant: React.FC<AIAssistantProps> = ({ open, onClose }) => {
               </Card>
             </Box>
           ))}
-          
+
           {isLoading && (
             <Box display="flex" alignItems="center" gap={2} sx={{ ml: 2, mb: 2 }}>
               <SmartToy />
