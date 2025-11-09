@@ -64,14 +64,14 @@ export const StatCard: React.FC<StatCardProps> = ({
         }
       }}
     >
-      <CardContent sx={{ p: 3 }}>
+      <CardContent sx={{ p: { xs: 2, sm: 3 } }}>
         <Box display="flex" alignItems="flex-start" justifyContent="space-between">
           <Box flex={1}>
             <Typography 
               variant="overline" 
               color="text.secondary"
               sx={{ 
-                fontSize: '0.75rem', 
+                fontSize: { xs: '0.65rem', sm: '0.75rem' }, 
                 fontWeight: 600,
                 letterSpacing: '0.5px',
                 opacity: 0.8
@@ -89,7 +89,7 @@ export const StatCard: React.FC<StatCardProps> = ({
                 backgroundClip: 'text',
                 WebkitBackgroundClip: 'text',
                 WebkitTextFillColor: 'transparent',
-                fontSize: '2rem'
+                fontSize: { xs: '1.4rem', sm: '1.8rem', md: '2rem' }
               }}
             >
               {value}
@@ -99,9 +99,10 @@ export const StatCard: React.FC<StatCardProps> = ({
                 variant="caption" 
                 color="text.secondary"
                 sx={{ 
-                  fontSize: '0.8rem',
+                  fontSize: { xs: '0.7rem', sm: '0.8rem' },
                   opacity: 0.7,
-                  fontWeight: 500
+                  fontWeight: 500,
+                  display: { xs: 'none', sm: 'block' }
                 }}
               >
                 {subtitle}
@@ -111,15 +112,15 @@ export const StatCard: React.FC<StatCardProps> = ({
 
           <Avatar
             sx={{ 
-              width: 56, 
-              height: 56,
+              width: { xs: 40, sm: 48, md: 56 }, 
+              height: { xs: 40, sm: 48, md: 56 },
               background: theme.palette.mode === 'dark'
                 ? `linear-gradient(135deg, ${colorConfig.main}20, ${colorConfig.light}10)`
                 : `linear-gradient(135deg, ${colorConfig.main}10, ${colorConfig.light}20)`,
               border: `2px solid ${colorConfig.main}30`,
               '& .MuiSvgIcon-root': {
                 color: colorConfig.main,
-                fontSize: 28
+                fontSize: { xs: 20, sm: 24, md: 28 }
               }
             }}
           >

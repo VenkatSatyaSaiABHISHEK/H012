@@ -28,7 +28,7 @@ html.theme-dark, body.theme-dark, #root.theme-dark, html.theme-dark body, html.t
   overflow: hidden;
 }
 
-/* Glass card hover effect */
+/* Glass card hover effect - different for mobile and desktop */
 .glass-card:hover {
   transform: translateY(-8px) scale(1.02);
   box-shadow: 
@@ -36,6 +36,21 @@ html.theme-dark, body.theme-dark, #root.theme-dark, html.theme-dark body, html.t
     0 0 0 1px rgba(255,255,255,0.2),
     inset 0 1px 0 rgba(255,255,255,0.3);
   border: 2px solid rgba(255,255,255,0.25);
+}
+
+/* Mobile-optimized hover effect */
+@media (max-width: 600px) {
+  .glass-card:hover {
+    transform: translateY(-4px) scale(1.01);
+  }
+  
+  .glass-card {
+    border-radius: 12px;
+    border: 1px solid rgba(255,255,255,0.15);
+    box-shadow: 
+      0 4px 16px rgba(0,0,0,0.3),
+      0 0 0 1px rgba(255,255,255,0.1);
+  }
 }
 
 /* Glass shimmer effect */
@@ -58,6 +73,13 @@ html.theme-dark, body.theme-dark, #root.theme-dark, html.theme-dark body, html.t
 
 .glass-card:hover::before {
   left: 100%;
+}
+
+/* Disable shimmer effect on mobile for better performance */
+@media (max-width: 600px) {
+  .glass-card::before {
+    display: none;
+  }
 }
 
 /* Enhanced dark mode glass effect */

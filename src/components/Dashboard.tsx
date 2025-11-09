@@ -112,15 +112,15 @@ export const Dashboard: React.FC<DashboardProps> = ({ toggleTheme }) => {
           : 'linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%)',
       }}
     >
-      <Container maxWidth="xl">
-        <Box py={4}>
+      <Container maxWidth="xl" sx={{ px: { xs: 1, sm: 2, md: 3 } }}>
+        <Box py={{ xs: 2, sm: 3, md: 4 }}>
           {/* Enhanced Header */}
           <Paper 
             elevation={0}
             sx={{ 
-              p: 3, 
-              mb: 4, 
-              borderRadius: 4,
+              p: { xs: 2, sm: 3 }, 
+              mb: { xs: 2, sm: 3, md: 4 }, 
+              borderRadius: { xs: 3, sm: 4 },
               background: theme.palette.mode === 'dark' 
                 ? 'rgba(26,26,26,0.8)' 
                 : 'rgba(255,255,255,0.8)',
@@ -225,8 +225,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ toggleTheme }) => {
           </Paper>
 
           {/* Enhanced Stats Cards - Time-focused for users */}
-          <Grid container spacing={3} mb={4}>
-            <Grid item xs={12} md={3}>
+          <Grid container spacing={{ xs: 2, sm: 3 }} mb={{ xs: 2, sm: 3, md: 4 }}>
+            <Grid item xs={6} sm={6} md={3}>
               <StatCard 
                 title="Active Devices" 
                 value={`${activeDevices}/${registeredDevices.length}`} 
@@ -235,7 +235,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ toggleTheme }) => {
                 color="primary"
               />
             </Grid>
-            <Grid item xs={12} md={3}>
+            <Grid item xs={6} sm={6} md={3}>
               <StatCard 
                 title="Today's Runtime" 
                 value={`${calculateTotalRuntimeToday()}h`} 
@@ -244,7 +244,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ toggleTheme }) => {
                 color="success"
               />
             </Grid>
-            <Grid item xs={12} md={3}>
+            <Grid item xs={6} sm={6} md={3}>
               <StatCard 
                 title="Longest Session" 
                 value={getLongestSession()} 
@@ -253,7 +253,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ toggleTheme }) => {
                 color="warning"
               />
             </Grid>
-            <Grid item xs={12} md={3}>
+            <Grid item xs={6} sm={6} md={3}>
               <StatCard 
                 title="Daily Cost" 
                 value={`$${(totalPowerConsumption * 0.15 / 1000 * parseFloat(calculateTotalRuntimeToday())).toFixed(2)}`} 
@@ -299,7 +299,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ toggleTheme }) => {
           )}
           
           {!showDiagnostics && (
-            <Grid container spacing={3}>
+            <Grid container spacing={{ xs: 2, sm: 3 }}>
               {registeredDevices.length > 0 ? (
                 registeredDevices.map(device => (
                   <Grid item xs={12} sm={6} lg={4} xl={3} key={device.id}>
