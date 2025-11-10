@@ -49,7 +49,13 @@ import {
   CloudQueue,
   Storage,
   SettingsEthernet,
-  Power
+  RecordVoiceOver,
+  Power,
+  NavigateBefore,
+  NavigateNext,
+  PlayArrow,
+  Pause,
+  PresentToAll
 } from '@mui/icons-material';
 
 interface ESP32ProcessMonitorProps {
@@ -96,8 +102,10 @@ export const ESP32ProcessMonitor: React.FC<ESP32ProcessMonitorProps> = ({ open, 
   });
   const [activeStep, setActiveStep] = useState(0);
   const [showCodeAnalysis, setShowCodeAnalysis] = useState(false);
+  const [showCodeVisualization, setShowCodeVisualization] = useState(false);
+  const [currentSlide, setCurrentSlide] = useState(0);
   
-  // ESP32 Code Analysis - Based on your actual code!
+  // ESP32 Code Analysis - Based on your actual uploaded code!
   const codeAnalysis: CodeAnalysis = {
     wifiConfig: {
       ssid: "abhi4g",
@@ -117,6 +125,120 @@ export const ESP32ProcessMonitor: React.FC<ESP32ProcessMonitorProps> = ({ open, 
     },
     relayPins: [23, 22],
     sinricDevices: ["68e9d693ba649e246c0af03d", "YOUR_SECOND_DEVICE_ID"]
+  };
+
+  // Your actual ESP32 code sections for visualization
+  const actualESP32Code = {
+    setup: `void setup() {
+  Serial.begin(115200);
+  Serial.println("\\n=== ESP32 + Sinric + Supabase ===");
+
+  // Initialize relay pins
+  for (int i = 0; i < NUM_DEVICES; i++) {
+    pinMode(devices[i].relayPin, OUTPUT);
+    digitalWrite(devices[i].relayPin, HIGH); // start OFF
+  }
+
+  // Connect to WiFi
+  WiFi.begin(WIFI_SSID, WIFI_PASS);
+  while (WiFi.status() != WL_CONNECTED) { 
+    delay(500); 
+    Serial.print("."); 
+  }
+
+  // Time sync for TLS
+  syncTime();
+  
+  // Setup MQTT with TLS
+  tlsClient.setCACertBundle(x509_crt_bundle_start, crt_bundle_size());
+  mqttClient.setClient(tlsClient);
+  mqttClient.setServer(MQTT_BROKER, MQTT_PORT);
+  
+  // Start HTTP server
+  server.begin();
+  
+  // Initialize SinricPro
+  SinricPro.begin(APP_KEY, APP_SECRET);
+}`,
+    
+    loop: `void loop() {
+  SinricPro.handle();    // Handle voice commands
+  server.handleClient(); // Handle HTTP requests
+  
+  if (!mqttClient.connected()) {
+    reconnectMqtt();     // Auto-reconnect MQTT
+  }
+  mqttClient.loop();     // Process MQTT messages
+}`,
+
+    relayControl: `void setRelayState(String deviceId, bool state, const char* source) {
+  for (int i = 0; i < NUM_DEVICES; i++) {
+    if (devices[i].deviceId == deviceId) {
+      devices[i].state = state;
+      digitalWrite(devices[i].relayPin, state ? LOW : HIGH); // Active LOW
+      
+      Serial.printf("📥 COMMAND from %s\\n", source);
+      Serial.printf("Device: %s -> %s\\n", deviceId.c_str(), state ? "ON" : "OFF");
+      
+      publishMqttStatus(deviceId, state);  // Notify MQTT
+      postStateEvent(deviceId, state);    // Log to Supabase
+      return;
+    }
+  }
+}`,
+
+    httpAPI: `void handleControl() {
+  // Parse JSON request
+  StaticJsonDocument<200> doc;
+  deserializeJson(doc, server.arg("plain"));
+  
+  const char* deviceId = doc["deviceId"];
+  const char* stateStr = doc["state"];
+  bool newState = (strcasecmp(stateStr, "ON") == 0);
+  
+  // Control the relay
+  setRelayState(String(deviceId), newState, "HTTP");
+  
+  // Send response
+  StaticJsonDocument<200> response;
+  response["success"] = true;
+  response["deviceId"] = deviceId;
+  response["state"] = newState ? "ON" : "OFF";
+  
+  String responseStr;
+  serializeJson(response, responseStr);
+  server.send(200, "application/json", responseStr);
+}`,
+
+    mqttHandler: `void mqttCallback(char* topic, byte* payload, unsigned int length) {
+  String topicStr = String(topic);
+  String deviceId = extractDeviceId(topicStr); // Extract from topic
+  
+  String message;
+  for (unsigned int i = 0; i < length; i++) {
+    message += (char)payload[i];
+  }
+  
+  StaticJsonDocument<200> doc;
+  deserializeJson(doc, message);
+  
+  const char* stateStr = doc["state"];
+  if (stateStr) {
+    bool newState = (strcasecmp(stateStr, "ON") == 0);
+    setRelayState(deviceId, newState, "MQTT (App)");
+  }
+}`,
+
+    voiceControl: `bool onPowerState(const String &deviceId, bool &state) {
+  // Called when Alexa/Google Assistant sends command
+  for (int i = 0; i < NUM_DEVICES; i++) {
+    if (devices[i].deviceId == deviceId) {
+      setRelayState(deviceId, state, "Sinric Pro (Alexa/Google)");
+      return true; // Success
+    }
+  }
+  return false; // Device not found
+}`
   };
 
   const initializeSteps = () => {
@@ -599,6 +721,619 @@ export const ESP32ProcessMonitor: React.FC<ESP32ProcessMonitorProps> = ({ open, 
                     </Typography>
                   </AccordionDetails>
                 </Accordion>
+
+                {/* Code Visualization Section - PowerPoint Style */}
+                <Box sx={{ mt: 3 }}>
+                  <Button
+                    variant="contained"
+                    startIcon={<Code />}
+                    onClick={() => setShowCodeVisualization(!showCodeVisualization)}
+                    fullWidth
+                    color="secondary"
+                    sx={{ 
+                      background: 'linear-gradient(45deg, #2196F3 30%, #21CBF3 90%)',
+                      boxShadow: '0 3px 5px 2px rgba(33, 203, 243, .3)',
+                    }}
+                  >
+                    {showCodeVisualization ? 'Hide' : 'Start'} ESP32 Code Presentation
+                  </Button>
+                </Box>
+
+                {showCodeVisualization && (
+                  <Box sx={{ mt: 2 }}>
+                    {/* Presentation Header */}
+                    <Box sx={{ 
+                      textAlign: 'center', 
+                      mb: 3, 
+                      p: 3,
+                      background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                      borderRadius: 2,
+                      color: 'white'
+                    }}>
+                      <PresentToAll sx={{ fontSize: 48, mb: 2 }} />
+                      <Typography variant="h4" gutterBottom sx={{ fontWeight: 'bold' }}>
+                        ESP32 Code Presentation
+                      </Typography>
+                      <Typography variant="h6" sx={{ opacity: 0.9 }}>
+                        Understanding Your Multi-Switch Controller
+                      </Typography>
+                      <Box sx={{ mt: 2, display: 'flex', justifyContent: 'center', gap: 1 }}>
+                        <Chip label={`Slide ${currentSlide + 1} of 7`} sx={{ bgcolor: 'rgba(255,255,255,0.2)', color: 'white' }} />
+                        <Chip label="Interactive Tutorial" sx={{ bgcolor: 'rgba(255,255,255,0.2)', color: 'white' }} />
+                      </Box>
+                    </Box>
+
+                    {/* Slide Content */}
+                    <Paper sx={{ 
+                      minHeight: '500px', 
+                      p: 4, 
+                      mb: 3,
+                      background: currentSlide === 0 ? 'linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%)' :
+                                 currentSlide === 1 ? 'linear-gradient(135deg, #e3ffe7 0%, #d9e7ff 100%)' :
+                                 currentSlide === 2 ? 'linear-gradient(135deg, #fff1eb 0%, #ace0f9 100%)' :
+                                 currentSlide === 3 ? 'linear-gradient(135deg, #ffeef8 0%, #f093fb 100%)' :
+                                 currentSlide === 4 ? 'linear-gradient(135deg, #f8e8ff 0%, #c8a8ff 100%)' :
+                                 currentSlide === 5 ? 'linear-gradient(135deg, #e8f4ff 0%, #a8d8ff 100%)' :
+                                 'linear-gradient(135deg, #faf8ff 0%, #d4a8ff 100%)',
+                      borderRadius: 2,
+                      boxShadow: '0 8px 32px rgba(0,0,0,0.1)'
+                    }}>
+                      
+                      {/* Slide 0: Overview */}
+                      {currentSlide === 0 && (
+                        <Box sx={{ textAlign: 'center' }}>
+                          <Memory sx={{ fontSize: 80, color: '#4a90e2', mb: 3 }} />
+                          <Typography variant="h4" gutterBottom sx={{ fontWeight: 'bold', color: '#2c3e50' }}>
+                            🚀 ESP32 Setup Process
+                          </Typography>
+                          <Typography variant="h6" sx={{ mb: 4, color: '#7f8c8d' }}>
+                            How your device initializes and gets ready
+                          </Typography>
+                          
+                          <Box sx={{ 
+                            bgcolor: 'rgba(255,255,255,0.8)', 
+                            p: 3, 
+                            borderRadius: 2, 
+                            mb: 3,
+                            textAlign: 'left'
+                          }}>
+                            <Typography variant="body1" sx={{ mb: 2, fontSize: '16px' }}>
+                              <strong>🔧 Initialization Steps:</strong>
+                            </Typography>
+                            <Typography variant="body2" sx={{ mb: 1, display: 'flex', alignItems: 'center', gap: 1 }}>
+                              <CheckCircle fontSize="small" color="success" />
+                              Serial communication setup (115200 baud)
+                            </Typography>
+                            <Typography variant="body2" sx={{ mb: 1, display: 'flex', alignItems: 'center', gap: 1 }}>
+                              <CheckCircle fontSize="small" color="success" />
+                              Relay pins (23, 22) configured as OUTPUT
+                            </Typography>
+                            <Typography variant="body2" sx={{ mb: 1, display: 'flex', alignItems: 'center', gap: 1 }}>
+                              <CheckCircle fontSize="small" color="success" />
+                              WiFi connection to "{codeAnalysis.wifiConfig.ssid}"
+                            </Typography>
+                            <Typography variant="body2" sx={{ mb: 1, display: 'flex', alignItems: 'center', gap: 1 }}>
+                              <CheckCircle fontSize="small" color="success" />
+                              Time synchronization for security certificates
+                            </Typography>
+                            <Typography variant="body2" sx={{ mb: 1, display: 'flex', alignItems: 'center', gap: 1 }}>
+                              <CheckCircle fontSize="small" color="success" />
+                              MQTT with TLS encryption setup
+                            </Typography>
+                            <Typography variant="body2" sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                              <CheckCircle fontSize="small" color="success" />
+                              HTTP server and SinricPro voice integration
+                            </Typography>
+                          </Box>
+                        </Box>
+                      )}
+
+                      {/* Slide 1: Main Loop */}
+                      {currentSlide === 1 && (
+                        <Box>
+                          <Box sx={{ textAlign: 'center', mb: 4 }}>
+                            <Refresh sx={{ fontSize: 60, color: '#27ae60', mb: 2 }} />
+                            <Typography variant="h4" gutterBottom sx={{ fontWeight: 'bold', color: '#2c3e50' }}>
+                              🔄 Main Loop Operations
+                            </Typography>
+                            <Typography variant="h6" sx={{ color: '#7f8c8d' }}>
+                              Continuous monitoring and control
+                            </Typography>
+                          </Box>
+                          
+                          <Box sx={{ display: 'flex', gap: 3 }}>
+                            <Box sx={{ flex: 1 }}>
+                              <Paper sx={{ p: 2, bgcolor: 'rgba(255,255,255,0.9)', borderRadius: 2 }}>
+                                <Typography variant="subtitle1" sx={{ mb: 2, fontWeight: 'bold' }}>
+                                  📝 Code:
+                                </Typography>
+                                <pre style={{ 
+                                  fontFamily: 'Monaco, Consolas, monospace', 
+                                  fontSize: '12px',
+                                  whiteSpace: 'pre-wrap',
+                                  margin: 0,
+                                  color: '#2d3748',
+                                  backgroundColor: '#f8f9fa',
+                                  padding: '12px',
+                                  borderRadius: '4px'
+                                }}>
+{actualESP32Code.loop}
+                                </pre>
+                              </Paper>
+                            </Box>
+                            <Box sx={{ flex: 1 }}>
+                              <Paper sx={{ p: 2, bgcolor: 'rgba(255,255,255,0.9)', borderRadius: 2, height: '100%' }}>
+                                <Typography variant="subtitle1" sx={{ mb: 2, fontWeight: 'bold' }}>
+                                  💡 Explanation:
+                                </Typography>
+                                <Typography variant="body2" sx={{ mb: 2 }}>
+                                  <strong>🎤 SinricPro.handle():</strong> Processes voice commands from Alexa/Google Assistant
+                                </Typography>
+                                <Typography variant="body2" sx={{ mb: 2 }}>
+                                  <strong>🌐 server.handleClient():</strong> Handles HTTP requests from your mobile app
+                                </Typography>
+                                <Typography variant="body2" sx={{ mb: 2 }}>
+                                  <strong>📡 MQTT reconnection:</strong> Maintains connection to your dashboard
+                                </Typography>
+                                <Typography variant="body2">
+                                  <strong>⚡ mqttClient.loop():</strong> Processes incoming MQTT messages
+                                </Typography>
+                              </Paper>
+                            </Box>
+                          </Box>
+                        </Box>
+                      )}
+
+                      {/* Slide 2: Relay Control */}
+                      {currentSlide === 2 && (
+                        <Box>
+                          <Box sx={{ textAlign: 'center', mb: 4 }}>
+                            <Power sx={{ fontSize: 60, color: '#e74c3c', mb: 2 }} />
+                            <Typography variant="h4" gutterBottom sx={{ fontWeight: 'bold', color: '#2c3e50' }}>
+                              ⚡ Relay Control Logic
+                            </Typography>
+                            <Typography variant="h6" sx={{ color: '#7f8c8d' }}>
+                              Smart switching with feedback
+                            </Typography>
+                          </Box>
+                          
+                          <Box sx={{ display: 'flex', gap: 3, mb: 3 }}>
+                            <Box sx={{ flex: 2 }}>
+                              <Paper sx={{ p: 2, bgcolor: 'rgba(255,255,255,0.9)', borderRadius: 2 }}>
+                                <pre style={{ 
+                                  fontFamily: 'Monaco, Consolas, monospace', 
+                                  fontSize: '10px',
+                                  whiteSpace: 'pre-wrap',
+                                  margin: 0,
+                                  color: '#2d3748',
+                                  backgroundColor: '#f0fff0',
+                                  padding: '12px',
+                                  borderRadius: '4px'
+                                }}>
+{actualESP32Code.relayControl}
+                                </pre>
+                              </Paper>
+                            </Box>
+                            <Box sx={{ flex: 1 }}>
+                              <Paper sx={{ p: 2, bgcolor: 'rgba(255,255,255,0.9)', borderRadius: 2, height: '100%' }}>
+                                <Typography variant="subtitle1" sx={{ mb: 2, fontWeight: 'bold' }}>
+                                  🔧 How it works:
+                                </Typography>
+                                <Box sx={{ mb: 2 }}>
+                                  <Typography variant="body2" sx={{ fontWeight: 'bold', color: '#e74c3c' }}>
+                                    GPIO 23 & 22 (Active LOW)
+                                  </Typography>
+                                  <Typography variant="caption">
+                                    ON = LOW signal, OFF = HIGH signal
+                                  </Typography>
+                                </Box>
+                                <Typography variant="body2" sx={{ mb: 1 }}>
+                                  ✅ Finds device by ID
+                                </Typography>
+                                <Typography variant="body2" sx={{ mb: 1 }}>
+                                  ⚡ Controls relay state
+                                </Typography>
+                                <Typography variant="body2" sx={{ mb: 1 }}>
+                                  📡 Publishes to MQTT
+                                </Typography>
+                                <Typography variant="body2">
+                                  📊 Logs to Supabase
+                                </Typography>
+                              </Paper>
+                            </Box>
+                          </Box>
+                        </Box>
+                      )}
+
+                      {/* Slide 3: HTTP API */}
+                      {currentSlide === 3 && (
+                        <Box>
+                          <Box sx={{ textAlign: 'center', mb: 4 }}>
+                            <Api sx={{ fontSize: 60, color: '#9b59b6', mb: 2 }} />
+                            <Typography variant="h4" gutterBottom sx={{ fontWeight: 'bold', color: '#2c3e50' }}>
+                              🌐 HTTP API Handler
+                            </Typography>
+                            <Typography variant="h6" sx={{ color: '#7f8c8d' }}>
+                              Web-based remote control
+                            </Typography>
+                          </Box>
+                          
+                          <Box sx={{ display: 'flex', gap: 3 }}>
+                            <Box sx={{ flex: 2 }}>
+                              <Paper sx={{ p: 2, bgcolor: 'rgba(255,255,255,0.9)', borderRadius: 2 }}>
+                                <pre style={{ 
+                                  fontFamily: 'Monaco, Consolas, monospace', 
+                                  fontSize: '10px',
+                                  whiteSpace: 'pre-wrap',
+                                  margin: 0,
+                                  color: '#2d3748',
+                                  backgroundColor: '#fff8f0',
+                                  padding: '12px',
+                                  borderRadius: '4px'
+                                }}>
+{actualESP32Code.httpAPI}
+                                </pre>
+                              </Paper>
+                            </Box>
+                            <Box sx={{ flex: 1 }}>
+                              <Paper sx={{ p: 2, bgcolor: 'rgba(255,255,255,0.9)', borderRadius: 2 }}>
+                                <Typography variant="subtitle1" sx={{ mb: 2, fontWeight: 'bold' }}>
+                                  📱 Your App Control:
+                                </Typography>
+                                <Typography variant="body2" sx={{ mb: 2 }}>
+                                  <strong>📥 Receives JSON:</strong> {`{"deviceId": "68e9d...", "state": "ON"}`}
+                                </Typography>
+                                <Typography variant="body2" sx={{ mb: 2 }}>
+                                  <strong>⚡ Controls Relay:</strong> Calls setRelayState() function
+                                </Typography>
+                                <Typography variant="body2" sx={{ mb: 2 }}>
+                                  <strong>📤 Sends Response:</strong> {`{"success": true, "state": "ON"}`}
+                                </Typography>
+                                <Box sx={{ mt: 2, p: 1, bgcolor: '#e8f5e8', borderRadius: 1 }}>
+                                  <Typography variant="caption" sx={{ fontWeight: 'bold' }}>
+                                    API Endpoint: POST /control
+                                  </Typography>
+                                </Box>
+                              </Paper>
+                            </Box>
+                          </Box>
+                        </Box>
+                      )}
+
+                      {/* Slide 4: MQTT Handler */}
+                      {currentSlide === 4 && (
+                        <Box>
+                          <Box sx={{ textAlign: 'center', mb: 4 }}>
+                            <CloudQueue sx={{ fontSize: 60, color: '#3498db', mb: 2 }} />
+                            <Typography variant="h4" gutterBottom sx={{ fontWeight: 'bold', color: '#2c3e50' }}>
+                              📡 MQTT Message Handler
+                            </Typography>
+                            <Typography variant="h6" sx={{ color: '#7f8c8d' }}>
+                              Dashboard remote control
+                            </Typography>
+                          </Box>
+                          
+                          <Box sx={{ display: 'flex', gap: 3 }}>
+                            <Box sx={{ flex: 2 }}>
+                              <Paper sx={{ p: 2, bgcolor: 'rgba(255,255,255,0.9)', borderRadius: 2 }}>
+                                <pre style={{ 
+                                  fontFamily: 'Monaco, Consolas, monospace', 
+                                  fontSize: '10px',
+                                  whiteSpace: 'pre-wrap',
+                                  margin: 0,
+                                  color: '#2d3748',
+                                  backgroundColor: '#f8f0ff',
+                                  padding: '12px',
+                                  borderRadius: '4px'
+                                }}>
+{actualESP32Code.mqttHandler}
+                                </pre>
+                              </Paper>
+                            </Box>
+                            <Box sx={{ flex: 1 }}>
+                              <Paper sx={{ p: 2, bgcolor: 'rgba(255,255,255,0.9)', borderRadius: 2 }}>
+                                <Typography variant="subtitle1" sx={{ mb: 2, fontWeight: 'bold' }}>
+                                  🖥️ Dashboard Control:
+                                </Typography>
+                                <Typography variant="body2" sx={{ mb: 2 }}>
+                                  <strong>📨 Topic:</strong> sinric/deviceId/control
+                                </Typography>
+                                <Typography variant="body2" sx={{ mb: 2 }}>
+                                  <strong>📦 Payload:</strong> {`{"state": "ON"}`}
+                                </Typography>
+                                <Typography variant="body2" sx={{ mb: 2 }}>
+                                  <strong>🔍 Extracts:</strong> Device ID from topic
+                                </Typography>
+                                <Typography variant="body2" sx={{ mb: 2 }}>
+                                  <strong>⚡ Action:</strong> Controls relay via setRelayState()
+                                </Typography>
+                                <Box sx={{ mt: 2, p: 1, bgcolor: '#e3f2fd', borderRadius: 1 }}>
+                                  <Typography variant="caption" sx={{ fontWeight: 'bold' }}>
+                                    Broker: {codeAnalysis.mqttConfig.broker}
+                                  </Typography>
+                                </Box>
+                              </Paper>
+                            </Box>
+                          </Box>
+                        </Box>
+                      )}
+
+                      {/* Slide 5: Voice Control */}
+                      {currentSlide === 5 && (
+                        <Box>
+                          <Box sx={{ textAlign: 'center', mb: 4 }}>
+                            <RecordVoiceOver sx={{ fontSize: 60, color: '#f39c12', mb: 2 }} />
+                            <Typography variant="h4" gutterBottom sx={{ fontWeight: 'bold', color: '#2c3e50' }}>
+                              🎤 Voice Control System
+                            </Typography>
+                            <Typography variant="h6" sx={{ color: '#7f8c8d' }}>
+                              Alexa & Google Assistant integration
+                            </Typography>
+                          </Box>
+                          
+                          <Box sx={{ display: 'flex', gap: 3 }}>
+                            <Box sx={{ flex: 2 }}>
+                              <Paper sx={{ p: 2, bgcolor: 'rgba(255,255,255,0.9)', borderRadius: 2 }}>
+                                <pre style={{ 
+                                  fontFamily: 'Monaco, Consolas, monospace', 
+                                  fontSize: '11px',
+                                  whiteSpace: 'pre-wrap',
+                                  margin: 0,
+                                  color: '#2d3748',
+                                  backgroundColor: '#f0f0ff',
+                                  padding: '12px',
+                                  borderRadius: '4px'
+                                }}>
+{actualESP32Code.voiceControl}
+                                </pre>
+                              </Paper>
+                            </Box>
+                            <Box sx={{ flex: 1 }}>
+                              <Paper sx={{ p: 2, bgcolor: 'rgba(255,255,255,0.9)', borderRadius: 2 }}>
+                                <Typography variant="subtitle1" sx={{ mb: 2, fontWeight: 'bold' }}>
+                                  🗣️ Voice Commands:
+                                </Typography>
+                                <Typography variant="body2" sx={{ mb: 2 }}>
+                                  <strong>💬 "Alexa, turn on lights"</strong>
+                                </Typography>
+                                <Typography variant="body2" sx={{ mb: 2 }}>
+                                  <strong>💬 "Hey Google, turn off fan"</strong>
+                                </Typography>
+                                <Typography variant="body2" sx={{ mb: 2 }}>
+                                  <strong>🔍 Process:</strong> SinricPro → onPowerState() → setRelayState()
+                                </Typography>
+                                <Typography variant="body2" sx={{ mb: 2 }}>
+                                  <strong>✅ Returns:</strong> true (success) or false (error)
+                                </Typography>
+                                <Box sx={{ mt: 2, p: 1, bgcolor: '#fff3e0', borderRadius: 1 }}>
+                                  <Typography variant="caption" sx={{ fontWeight: 'bold' }}>
+                                    Device: {codeAnalysis.sinricDevices[0].substring(0, 8)}...
+                                  </Typography>
+                                </Box>
+                              </Paper>
+                            </Box>
+                          </Box>
+                        </Box>
+                      )}
+
+                      {/* Slide 6: Complete Flow Diagram */}
+                      {currentSlide === 6 && (
+                        <Box>
+                          <Box sx={{ textAlign: 'center', mb: 4 }}>
+                            <Box sx={{ display: 'flex', justifyContent: 'center', mb: 2 }}>
+                              <PresentToAll sx={{ fontSize: 60, color: '#8e44ad' }} />
+                            </Box>
+                            <Typography variant="h4" gutterBottom sx={{ fontWeight: 'bold', color: '#2c3e50' }}>
+                              🔄 Complete System Flow
+                            </Typography>
+                            <Typography variant="h6" sx={{ color: '#7f8c8d' }}>
+                              All control methods working together
+                            </Typography>
+                          </Box>
+                          
+                          <Paper sx={{ p: 3, bgcolor: 'rgba(255,255,255,0.9)', borderRadius: 2 }}>
+                            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+                              {/* Voice Control Flow */}
+                              <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, flexWrap: 'wrap' }}>
+                                <Box sx={{ 
+                                  minWidth: '110px', 
+                                  p: 2, 
+                                  bgcolor: '#e3f2fd', 
+                                  borderRadius: 2, 
+                                  textAlign: 'center',
+                                  fontSize: '12px',
+                                  boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
+                                }}>
+                                  🎤 Voice Command<br/><strong>(Alexa/Google)</strong>
+                                </Box>
+                                <Box sx={{ fontSize: '20px', color: '#2196F3' }}>→</Box>
+                                <Box sx={{ 
+                                  minWidth: '110px', 
+                                  p: 2, 
+                                  bgcolor: '#e8f5e8', 
+                                  borderRadius: 2, 
+                                  textAlign: 'center',
+                                  fontSize: '12px',
+                                  boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
+                                }}>
+                                  📡 SinricPro<br/><strong>Handler</strong>
+                                </Box>
+                                <Box sx={{ fontSize: '20px', color: '#4CAF50' }}>→</Box>
+                                <Box sx={{ 
+                                  minWidth: '110px', 
+                                  p: 2, 
+                                  bgcolor: '#fff3e0', 
+                                  borderRadius: 2, 
+                                  textAlign: 'center',
+                                  fontSize: '12px',
+                                  boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
+                                }}>
+                                  ⚡ Relay Control<br/><strong>GPIO 23/22</strong>
+                                </Box>
+                              </Box>
+                              
+                              {/* HTTP Control Flow */}
+                              <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, flexWrap: 'wrap' }}>
+                                <Box sx={{ 
+                                  minWidth: '110px', 
+                                  p: 2, 
+                                  bgcolor: '#f3e5f5', 
+                                  borderRadius: 2, 
+                                  textAlign: 'center',
+                                  fontSize: '12px',
+                                  boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
+                                }}>
+                                  📱 Your App<br/><strong>(HTTP Request)</strong>
+                                </Box>
+                                <Box sx={{ fontSize: '20px', color: '#9C27B0' }}>→</Box>
+                                <Box sx={{ 
+                                  minWidth: '110px', 
+                                  p: 2, 
+                                  bgcolor: '#e0f2f1', 
+                                  borderRadius: 2, 
+                                  textAlign: 'center',
+                                  fontSize: '12px',
+                                  boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
+                                }}>
+                                  🌐 HTTP<br/><strong>Handler</strong>
+                                </Box>
+                                <Box sx={{ fontSize: '20px', color: '#4CAF50' }}>→</Box>
+                                <Box sx={{ 
+                                  minWidth: '110px', 
+                                  p: 2, 
+                                  bgcolor: '#fff3e0', 
+                                  borderRadius: 2, 
+                                  textAlign: 'center',
+                                  fontSize: '12px',
+                                  boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
+                                }}>
+                                  ⚡ Relay Control<br/><strong>GPIO 23/22</strong>
+                                </Box>
+                              </Box>
+                              
+                              {/* MQTT Control Flow */}
+                              <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, flexWrap: 'wrap' }}>
+                                <Box sx={{ 
+                                  minWidth: '110px', 
+                                  p: 2, 
+                                  bgcolor: '#fce4ec', 
+                                  borderRadius: 2, 
+                                  textAlign: 'center',
+                                  fontSize: '12px',
+                                  boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
+                                }}>
+                                  🖥️ Dashboard<br/><strong>(MQTT Message)</strong>
+                                </Box>
+                                <Box sx={{ fontSize: '20px', color: '#E91E63' }}>→</Box>
+                                <Box sx={{ 
+                                  minWidth: '110px', 
+                                  p: 2, 
+                                  bgcolor: '#e1f5fe', 
+                                  borderRadius: 2, 
+                                  textAlign: 'center',
+                                  fontSize: '12px',
+                                  boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
+                                }}>
+                                  📡 MQTT<br/><strong>Handler</strong>
+                                </Box>
+                                <Box sx={{ fontSize: '20px', color: '#4CAF50' }}>→</Box>
+                                <Box sx={{ 
+                                  minWidth: '110px', 
+                                  p: 2, 
+                                  bgcolor: '#fff3e0', 
+                                  borderRadius: 2, 
+                                  textAlign: 'center',
+                                  fontSize: '12px',
+                                  boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
+                                }}>
+                                  ⚡ Relay Control<br/><strong>GPIO 23/22</strong>
+                                </Box>
+                              </Box>
+                              
+                              {/* Final Output */}
+                              <Box sx={{ 
+                                textAlign: 'center', 
+                                mt: 3, 
+                                p: 2, 
+                                bgcolor: '#f0f4f8', 
+                                borderRadius: 2,
+                                border: '2px dashed #4a90e2'
+                              }}>
+                                <Typography variant="h6" sx={{ mb: 2, color: '#2c3e50' }}>
+                                  📊 All Methods Lead To:
+                                </Typography>
+                                <Box sx={{ display: 'flex', justifyContent: 'center', gap: 2, flexWrap: 'wrap' }}>
+                                  <Chip label="📡 MQTT Status Publish" color="primary" />
+                                  <Chip label="📊 Supabase Event Log" color="secondary" />
+                                  <Chip label="⚡ Physical Relay Switch" color="success" />
+                                </Box>
+                              </Box>
+                            </Box>
+                          </Paper>
+                        </Box>
+                      )}
+                    </Paper>
+
+                    {/* Navigation Controls */}
+                    <Box sx={{ 
+                      display: 'flex', 
+                      justifyContent: 'center', 
+                      alignItems: 'center', 
+                      gap: 2,
+                      mt: 2
+                    }}>
+                      <Button
+                        variant="contained"
+                        startIcon={<NavigateBefore />}
+                        onClick={() => setCurrentSlide(Math.max(0, currentSlide - 1))}
+                        disabled={currentSlide === 0}
+                        sx={{ 
+                          minWidth: '120px',
+                          background: 'linear-gradient(45deg, #FF6B6B 30%, #FF8E53 90%)',
+                        }}
+                      >
+                        Previous
+                      </Button>
+                      
+                      <Box sx={{ 
+                        display: 'flex', 
+                        gap: 1,
+                        bgcolor: 'rgba(0,0,0,0.1)',
+                        p: 1,
+                        borderRadius: 2
+                      }}>
+                        {Array.from({ length: 7 }, (_, i) => (
+                          <Box
+                            key={i}
+                            onClick={() => setCurrentSlide(i)}
+                            sx={{
+                              width: 12,
+                              height: 12,
+                              borderRadius: '50%',
+                              bgcolor: currentSlide === i ? '#2196F3' : '#ccc',
+                              cursor: 'pointer',
+                              transition: 'all 0.2s',
+                              '&:hover': { bgcolor: currentSlide === i ? '#1976D2' : '#999' }
+                            }}
+                          />
+                        ))}
+                      </Box>
+                      
+                      <Button
+                        variant="contained"
+                        endIcon={<NavigateNext />}
+                        onClick={() => setCurrentSlide(Math.min(6, currentSlide + 1))}
+                        disabled={currentSlide === 6}
+                        sx={{ 
+                          minWidth: '120px',
+                          background: 'linear-gradient(45deg, #4CAF50 30%, #8BC34A 90%)',
+                        }}
+                      >
+                        Next
+                      </Button>
+                    </Box>
+                  </Box>
+                )}
               </Box>
             )}
 

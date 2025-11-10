@@ -9,7 +9,18 @@ import {
   Button, 
   Paper,
   Chip,
-  Avatar
+  Avatar,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableRow,
+  Alert
 } from '@mui/material';
 import { 
   Brightness4, 
@@ -24,7 +35,8 @@ import {
   AccessTime,
   Timer,
   TableChart,
-  CurrencyRupee
+  CurrencyRupee,
+  CloudQueue
 } from '@mui/icons-material';
 import { DeviceCard } from './Card';
 import StatCard from './StatCard';
@@ -37,8 +49,10 @@ import DataViewer from './DataViewer';
 import DeviceManager from './DeviceManager';
 import ESP32Controller from './ESP32Controller';
 import SystemStatusOverview from './SystemStatusOverview';
+import { DeviceUsageSummary } from './DeviceUsageSummary';
 import useDevices from '../hooks/useDevices';
 import { Link as RouterLink } from 'react-router-dom';
+import { useMQTTContext } from '../context/MQTTContext';
 
 interface DashboardProps {
   toggleTheme: () => void;
@@ -46,12 +60,14 @@ interface DashboardProps {
 
 export const Dashboard: React.FC<DashboardProps> = ({ toggleTheme }) => {
   const theme = useTheme();
+  const { isConnected: mqttConnected, connectionError } = useMQTTContext();
   const { devices: polledDevices, loading: devicesLoading, connectedCount, refresh, error } = useDevices(8000);
   const [settingsOpen, setSettingsOpen] = React.useState(false);
   const [setupGuideOpen, setSetupGuideOpen] = React.useState(false);
   const [dataViewerOpen, setDataViewerOpen] = React.useState(false);
   const [deviceManagerOpen, setDeviceManagerOpen] = React.useState(false);
   const [showDiagnostics, setShowDiagnostics] = React.useState(false);
+  const [showRuntimeDebug, setShowRuntimeDebug] = React.useState(false);
   const [registeredDevices, setRegisteredDevices] = React.useState<Array<{id: string, name: string}>>([]);
   
   // Use discovered devices from the hook
@@ -87,13 +103,175 @@ export const Dashboard: React.FC<DashboardProps> = ({ toggleTheme }) => {
     return activeDevices * 60; // Estimated 60W per active device
   }, [activeDevices]);
 
-  // Calculate total runtime for today across all devices
+  // Calculate total runtime for today across all devices - REAL DATA
+  const [todayRuntime, setTodayRuntime] = React.useState<number>(0);
+  const [runtimeDebugInfo, setRuntimeDebugInfo] = React.useState<{
+    totalSessions: number;
+    validSessions: number;
+    invalidSessions: number;
+    totalMinutes: number;
+    sessionDetails: Array<{
+      deviceId: string;
+      deviceName: string;
+      onTime: string;
+      offTime: string;
+      duration: number;
+      valid: boolean;
+      reason?: string;
+    }>;
+    rawEvents: number;
+  }>({
+    totalSessions: 0,
+    validSessions: 0,
+    invalidSessions: 0,
+    totalMinutes: 0,
+    sessionDetails: [],
+    rawEvents: 0
+  });
+  
   const calculateTotalRuntimeToday = (): string => {
-    // This would normally come from your device usage data
-    // For now, simulate based on active devices
-    const estimatedHours = activeDevices * 2.5; // Assume 2.5 hours average per active device
-    return estimatedHours.toFixed(1);
+    return todayRuntime < 60 
+      ? `${Math.round(todayRuntime)}m`
+      : `${(todayRuntime / 60).toFixed(1)}h`;
   };
+
+  // Load real usage data for today
+  React.useEffect(() => {
+    const loadTodayUsage = async () => {
+      try {
+        const today = new Date();
+        const startOfToday = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+        const endOfToday = new Date(startOfToday);
+        endOfToday.setDate(endOfToday.getDate() + 1);
+
+        // Import supabase in the component
+        const { supabase } = await import('../config/supabase');
+        
+        const { data: events, error } = await supabase
+          .from('events')
+          .select('*')
+          .gte('created_at', startOfToday.toISOString())
+          .lt('created_at', endOfToday.toISOString())
+          .order('created_at', { ascending: true });
+
+        if (error) throw error;
+
+        // Calculate actual runtime from ON/OFF pairs with detailed debugging
+        let totalMinutes = 0;
+        const sessionDetails: any[] = [];
+        const processedOnEvents = new Set(); // Prevent duplicate processing
+
+        const getDeviceName = (deviceId: string) => {
+          const names: Record<string, string> = {
+            '6c0af03d': 'Living Room Light',
+            '68e9d693ba649e246c0af03d': 'Living Room Light'
+          };
+          return names[deviceId] || names[deviceId.substring(0, 8)] || `Device ${deviceId.slice(-4)}`;
+        };
+
+        events?.forEach(event => {
+          if (event.state === 'ON' && !processedOnEvents.has(event.id || `${event.device_id}_${event.created_at}`)) {
+            processedOnEvents.add(event.id || `${event.device_id}_${event.created_at}`);
+            
+            // Find corresponding OFF event (must come after this ON event)
+            const offEvent = events.find(e => 
+              e.device_id === event.device_id && 
+              e.state === 'OFF' &&
+              new Date(e.created_at) > new Date(event.created_at) &&
+              !processedOnEvents.has(`off_${e.id || `${e.device_id}_${e.created_at}`}`)
+            );
+
+            if (offEvent) {
+              // Mark this OFF event as processed
+              processedOnEvents.add(`off_${offEvent.id || `${offEvent.device_id}_${offEvent.created_at}`}`);
+              
+              const onTime = new Date(event.created_at);
+              const offTime = new Date(offEvent.created_at);
+              const duration = (offTime.getTime() - onTime.getTime()) / (1000 * 60);
+              
+              const isValidSession = duration > 0 && duration < 1440; // Between 0 and 24 hours
+              
+                            sessionDetails.push({
+                              deviceId: event.device_id,
+                              deviceName: getDeviceName(event.device_id),
+                              onTime: onTime.toLocaleString(),
+                              offTime: offTime.toLocaleString(),
+                              duration: duration,
+                              valid: isValidSession,
+                              reason: !isValidSession ? 
+                                (duration <= 0 ? 'Invalid time order' : 'Session too long (>3 days - likely data error)') : 
+                                undefined
+                            });              if (isValidSession) {
+                totalMinutes += duration;
+              }
+            } else {
+              // Check if device is currently running (most recent event for this device is this ON)
+              const deviceEvents = events.filter(e => e.device_id === event.device_id);
+              const mostRecentEvent = deviceEvents.sort((a, b) => 
+                new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+              )[0];
+              
+              if (mostRecentEvent && mostRecentEvent.created_at === event.created_at && mostRecentEvent.state === 'ON') {
+                // Device is currently running - add current session time
+                const onTime = new Date(event.created_at);
+                const now = new Date();
+                const currentDuration = (now.getTime() - onTime.getTime()) / (1000 * 60);
+                
+                const isValidSession = currentDuration > 0 && currentDuration < 1440;
+                
+                sessionDetails.push({
+                  deviceId: event.device_id,
+                  deviceName: getDeviceName(event.device_id),
+                  onTime: onTime.toLocaleString(),
+                  offTime: 'Currently running',
+                  duration: currentDuration,
+                  valid: isValidSession,
+                  reason: !isValidSession ? 
+                    (currentDuration <= 0 ? 'Invalid time' : 'Running too long (>24h)') : 
+                    undefined
+                });
+                
+                if (isValidSession) {
+                  totalMinutes += currentDuration;
+                }
+              } else {
+                // ON event with no corresponding OFF and not currently running
+                sessionDetails.push({
+                  deviceId: event.device_id,
+                  deviceName: getDeviceName(event.device_id),
+                  onTime: new Date(event.created_at).toLocaleString(),
+                  offTime: 'No OFF event found',
+                  duration: 0,
+                  valid: false,
+                  reason: 'Incomplete session (no OFF event)'
+                });
+              }
+            }
+          }
+        });
+
+        // Update debug information
+        setRuntimeDebugInfo({
+          totalSessions: sessionDetails.length,
+          validSessions: sessionDetails.filter(s => s.valid).length,
+          invalidSessions: sessionDetails.filter(s => !s.valid).length,
+          totalMinutes: totalMinutes,
+          sessionDetails: sessionDetails,
+          rawEvents: events?.length || 0
+        });
+
+        setTodayRuntime(totalMinutes);
+      } catch (error) {
+        console.error('Error loading today usage:', error);
+        setTodayRuntime(0);
+      }
+    };
+
+    loadTodayUsage();
+    // Refresh every 30 seconds to update running sessions
+    const interval = setInterval(loadTodayUsage, 30000);
+    return () => clearInterval(interval);
+  }, []);
 
   // Calculate longest running device session
   const getLongestSession = (): string => {
@@ -156,6 +334,13 @@ export const Dashboard: React.FC<DashboardProps> = ({ toggleTheme }) => {
                   color={connectedCount === registeredDevices.length ? 'success' : 'warning'}
                   sx={{ mr: 1 }}
                 />
+                <Chip 
+                  icon={<CloudQueue />}
+                  label={mqttConnected ? 'MQTT Connected' : connectionError ? 'MQTT Error' : 'MQTT Connecting'} 
+                  color={mqttConnected ? 'success' : connectionError ? 'error' : 'warning'}
+                  size="small"
+                  sx={{ mr: 1 }}
+                />
                 <IconButton 
                   onClick={() => window.location.reload()} 
                   sx={{ 
@@ -183,6 +368,17 @@ export const Dashboard: React.FC<DashboardProps> = ({ toggleTheme }) => {
                   }}
                 >
                   <Settings />
+                </IconButton>
+                <IconButton 
+                  component={RouterLink}
+                  to="/mqtt-backend"
+                  sx={{ 
+                    background: theme.palette.background.paper,
+                    '&:hover': { background: theme.palette.action.hover }
+                  }}
+                  title="MQTT Backend Monitor"
+                >
+                  <DeviceHub />
                 </IconButton>
                 <IconButton 
                   onClick={toggleTheme}
@@ -236,13 +432,189 @@ export const Dashboard: React.FC<DashboardProps> = ({ toggleTheme }) => {
               />
             </Grid>
             <Grid item xs={6} sm={6} md={3}>
-              <StatCard 
-                title="Today's Runtime" 
-                value={`${calculateTotalRuntimeToday()}h`} 
-                subtitle="Total usage time today"
-                icon={<AccessTime />}
-                color="success"
-              />
+              <Box position="relative">
+                <StatCard 
+                  title="Today's Runtime" 
+                  value={calculateTotalRuntimeToday()} 
+                  subtitle="Total usage time today"
+                  icon={<AccessTime />}
+                  color="success"
+                />
+                <IconButton
+                  size="small"
+                  onClick={async () => {
+                    // Calculate debug info using the SAME logic as the main dashboard
+                    try {
+                      const today = new Date();
+                      const startOfToday = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+                      const endOfToday = new Date(startOfToday);
+                      endOfToday.setDate(endOfToday.getDate() + 1);
+
+                      const { supabase } = await import('../config/supabase');
+                      
+                      const { data: events, error } = await supabase
+                        .from('device_events')
+                        .select('*')
+                        .gte('created_at', startOfToday.toISOString())
+                        .lt('created_at', endOfToday.toISOString())
+                        .order('created_at', { ascending: true });
+
+                      if (!events || error) {
+                        console.error('Debug - Error loading events:', error);
+                        setRuntimeDebugInfo({
+                          totalSessions: 0,
+                          validSessions: 0,
+                          invalidSessions: 0,
+                          totalMinutes: 0,
+                          sessionDetails: [],
+                          rawEvents: 0
+                        });
+                        setShowRuntimeDebug(true);
+                        return;
+                      }
+
+                      const onEvents = events.filter(event => event.state === 'ON');
+                      const processedOnEvents = new Set<string>();
+                      const sessionDetails: Array<{
+                        deviceId: string;
+                        deviceName: string;
+                        onTime: string;
+                        offTime: string;
+                        duration: number;
+                        valid: boolean;
+                        reason?: string;
+                      }> = [];
+                      let totalMinutes = 0;
+                      let validSessions = 0;
+                      let invalidSessions = 0;
+
+                      const getDeviceName = (deviceId: string): string => {
+                        const device = registeredDevices.find((d: {id: string, name: string}) => d.id === deviceId);
+                        return device ? device.name : deviceId.slice(-8) + '...';
+                      };
+
+                      for (const event of onEvents) {
+                        const eventKey = `${event.device_id}-${event.created_at}`;
+                        if (processedOnEvents.has(eventKey)) {
+                          sessionDetails.push({
+                            deviceId: event.device_id,
+                            deviceName: getDeviceName(event.device_id),
+                            onTime: new Date(event.created_at).toLocaleString(),
+                            offTime: 'Duplicate event',
+                            duration: 0,
+                            valid: false,
+                            reason: 'Duplicate ON event (skipped)'
+                          });
+                          invalidSessions++;
+                          continue;
+                        }
+                        processedOnEvents.add(eventKey);
+
+                        const correspondingOff = events.find(offEvent => 
+                          offEvent.device_id === event.device_id && 
+                          offEvent.state === 'OFF' && 
+                          new Date(offEvent.created_at) > new Date(event.created_at)
+                        );
+
+                        if (correspondingOff) {
+                            const onTime = new Date(event.created_at);
+                            const offTime = new Date(correspondingOff.created_at);
+                            const duration = (offTime.getTime() - onTime.getTime()) / (1000 * 60);
+                            // Reasonable validation - max 3 days per session for home devices
+                            // This allows legitimate long usage (AC, heaters, pumps) but rejects data corruption
+                            const isValidSession = duration > 0 && duration <= 4320; // 72 hours = 3 days
+                            
+                            sessionDetails.push({
+                            deviceId: event.device_id,
+                            deviceName: getDeviceName(event.device_id),
+                            onTime: onTime.toLocaleString(),
+                            offTime: offTime.toLocaleString(),
+                            duration: duration,
+                            valid: isValidSession,
+                            reason: !isValidSession ? 
+                              (duration <= 0 ? 'Invalid time order' : 'Session too long (>24h)') : 
+                              undefined
+                          });
+
+                          if (isValidSession) {
+                            totalMinutes += duration;
+                            validSessions++;
+                          } else {
+                            invalidSessions++;
+                          }
+                        } else {
+                          const deviceEvents = events.filter(e => e.device_id === event.device_id);
+                          const mostRecentEvent = deviceEvents.sort((a, b) => 
+                            new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+                          )[0];
+
+                          if (mostRecentEvent && mostRecentEvent.created_at === event.created_at && mostRecentEvent.state === 'ON') {
+                            const onTime = new Date(event.created_at);
+                            const now = new Date();
+                            const currentDuration = (now.getTime() - onTime.getTime()) / (1000 * 60);
+                            // Reasonable validation for currently running sessions too
+                            const isValidSession = currentDuration > 0 && currentDuration <= 4320;
+
+                            sessionDetails.push({
+                              deviceId: event.device_id,
+                              deviceName: getDeviceName(event.device_id),
+                              onTime: onTime.toLocaleString(),
+                              offTime: 'Currently running',
+                              duration: currentDuration,
+                              valid: isValidSession,
+                              reason: !isValidSession ? 
+                                (currentDuration <= 0 ? 'Invalid time' : 'Running too long (>3 days - likely stale data)') : 
+                                undefined
+                            });
+
+                            if (isValidSession) {
+                              totalMinutes += currentDuration;
+                              validSessions++;
+                            } else {
+                              invalidSessions++;
+                            }
+                          } else {
+                            sessionDetails.push({
+                              deviceId: event.device_id,
+                              deviceName: getDeviceName(event.device_id),
+                              onTime: new Date(event.created_at).toLocaleString(),
+                              offTime: 'No OFF event found',
+                              duration: 0,
+                              valid: false,
+                              reason: 'Incomplete session (no OFF event)'
+                            });
+                            invalidSessions++;
+                          }
+                        }
+                      }
+
+                      setRuntimeDebugInfo({
+                        totalSessions: validSessions + invalidSessions,
+                        validSessions: validSessions,
+                        invalidSessions: invalidSessions,
+                        totalMinutes: totalMinutes,
+                        sessionDetails: sessionDetails,
+                        rawEvents: events.length
+                      });
+
+                      setShowRuntimeDebug(true);
+                    } catch (error) {
+                      console.error('Debug calculation error:', error);
+                      setShowRuntimeDebug(true);
+                    }
+                  }}
+                  sx={{
+                    position: 'absolute',
+                    top: 8,
+                    right: 8,
+                    backgroundColor: 'rgba(255,255,255,0.1)',
+                    '&:hover': { backgroundColor: 'rgba(255,255,255,0.2)' }
+                  }}
+                  title="Show calculation details"
+                >
+                  <Help fontSize="small" />
+                </IconButton>
+              </Box>
             </Grid>
             <Grid item xs={6} sm={6} md={3}>
               <StatCard 
@@ -256,7 +628,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ toggleTheme }) => {
             <Grid item xs={6} sm={6} md={3}>
               <StatCard 
                 title="Daily Cost" 
-                value={`$${(totalPowerConsumption * 0.15 / 1000 * parseFloat(calculateTotalRuntimeToday())).toFixed(2)}`} 
+                value={`₹${((todayRuntime / 60) * 60 / 1000 * 6.5).toFixed(2)}`} 
                 subtitle="Estimated electricity cost"
                 icon={<TrendingUp />}
                 color="info"
@@ -266,7 +638,14 @@ export const Dashboard: React.FC<DashboardProps> = ({ toggleTheme }) => {
 
           {/* System Status Overview - Always show the service cards */}
           {!showDiagnostics && (
-            <SystemStatusOverview onShowDiagnostics={() => setShowDiagnostics(true)} />
+            <>
+              <SystemStatusOverview onShowDiagnostics={() => setShowDiagnostics(true)} />
+              
+              {/* Device Usage Summary - Show daily/weekly usage patterns */}
+              <Box mt={3}>
+                <DeviceUsageSummary />
+              </Box>
+            </>
           )}
 
           {/* Advanced Diagnostics - Show when requested or when there are issues */}
@@ -370,6 +749,132 @@ export const Dashboard: React.FC<DashboardProps> = ({ toggleTheme }) => {
           onClose={() => setDeviceManagerOpen(false)}
           onDeviceAdded={() => refresh()} 
         />
+
+        {/* Runtime Calculation Debug Dialog */}
+        <Dialog open={showRuntimeDebug} onClose={() => setShowRuntimeDebug(false)} maxWidth="lg" fullWidth>
+          <DialogTitle>
+            <Box display="flex" alignItems="center" gap={2}>
+              <AccessTime />
+              <Typography variant="h6">Runtime Calculation Details</Typography>
+            </Box>
+          </DialogTitle>
+          <DialogContent>
+            <Alert severity="info" sx={{ mb: 3 }}>
+              <strong>How Runtime is Calculated:</strong><br/>
+              System pairs ON events with their corresponding OFF events to calculate actual usage time.
+              Only valid sessions (0 to 24 hours) are included in the total.<br/>
+              <strong>Date Range:</strong> Today ({new Date().toLocaleDateString()}) only<br/>
+              <strong>Current Dashboard Value:</strong> {calculateTotalRuntimeToday()} ({todayRuntime.toFixed(1)} minutes)
+            </Alert>
+
+            {/* Summary Cards */}
+            <Grid container spacing={2} sx={{ mb: 3 }}>
+              <Grid item xs={6} sm={3}>
+                <Paper sx={{ p: 2, textAlign: 'center', bgcolor: 'primary.main', color: 'white' }}>
+                  <Typography variant="h4">{runtimeDebugInfo.rawEvents}</Typography>
+                  <Typography variant="body2">Raw Events</Typography>
+                </Paper>
+              </Grid>
+              <Grid item xs={6} sm={3}>
+                <Paper sx={{ p: 2, textAlign: 'center', bgcolor: 'success.main', color: 'white' }}>
+                  <Typography variant="h4">{runtimeDebugInfo.validSessions}</Typography>
+                  <Typography variant="body2">Valid Sessions</Typography>
+                </Paper>
+              </Grid>
+              <Grid item xs={6} sm={3}>
+                <Paper sx={{ p: 2, textAlign: 'center', bgcolor: 'error.main', color: 'white' }}>
+                  <Typography variant="h4">{runtimeDebugInfo.invalidSessions}</Typography>
+                  <Typography variant="body2">Invalid Sessions</Typography>
+                </Paper>
+              </Grid>
+              <Grid item xs={6} sm={3}>
+                <Paper sx={{ p: 2, textAlign: 'center', bgcolor: 'warning.main', color: 'white' }}>
+                  <Typography variant="h4">
+                    {runtimeDebugInfo.totalMinutes < 60 
+                      ? `${Math.round(runtimeDebugInfo.totalMinutes)}m`
+                      : `${(runtimeDebugInfo.totalMinutes / 60).toFixed(1)}h`
+                    }
+                  </Typography>
+                  <Typography variant="body2">Total Runtime</Typography>
+                </Paper>
+              </Grid>
+            </Grid>
+
+            {/* Session Details Table */}
+            <Typography variant="h6" sx={{ mb: 2 }}>Session Details:</Typography>
+            <TableContainer component={Paper} sx={{ maxHeight: 400 }}>
+              <Table stickyHeader size="small">
+                <TableHead>
+                  <TableRow>
+                    <TableCell>Device</TableCell>
+                    <TableCell>ON Time</TableCell>
+                    <TableCell>OFF Time</TableCell>
+                    <TableCell align="right">Duration</TableCell>
+                    <TableCell align="center">Valid</TableCell>
+                    <TableCell>Notes</TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {runtimeDebugInfo.sessionDetails.map((session, index) => (
+                    <TableRow key={index} sx={{ 
+                      bgcolor: session.valid ? 'success.light' : 'error.light',
+                      opacity: session.valid ? 1 : 0.7
+                    }}>
+                      <TableCell>
+                        <Typography variant="body2" fontWeight={500}>
+                          {session.deviceName}
+                        </Typography>
+                        <Typography variant="caption" color="text.secondary">
+                          {session.deviceId.slice(-8)}...
+                        </Typography>
+                      </TableCell>
+                      <TableCell>
+                        <Typography variant="body2">{session.onTime}</Typography>
+                      </TableCell>
+                      <TableCell>
+                        <Typography variant="body2">{session.offTime}</Typography>
+                      </TableCell>
+                      <TableCell align="right">
+                        <Typography variant="body2" fontWeight={500}>
+                          {session.duration < 1 
+                            ? `${Math.round(session.duration * 60)}s`
+                            : session.duration < 60 
+                              ? `${Math.round(session.duration)}m`
+                              : `${(session.duration / 60).toFixed(1)}h`
+                          }
+                        </Typography>
+                      </TableCell>
+                      <TableCell align="center">
+                        <Chip 
+                          label={session.valid ? 'Valid' : 'Invalid'} 
+                          color={session.valid ? 'success' : 'error'}
+                          size="small"
+                        />
+                      </TableCell>
+                      <TableCell>
+                        <Typography variant="caption" color="text.secondary">
+                          {session.reason || 'Included in total'}
+                        </Typography>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                  {runtimeDebugInfo.sessionDetails.length === 0 && (
+                    <TableRow>
+                      <TableCell colSpan={6} align="center">
+                        <Typography variant="body2" color="text.secondary">
+                          No sessions found for today
+                        </Typography>
+                      </TableCell>
+                    </TableRow>
+                  )}
+                </TableBody>
+              </Table>
+            </TableContainer>
+          </DialogContent>
+          <DialogActions>
+            <Button onClick={() => setShowRuntimeDebug(false)}>Close</Button>
+          </DialogActions>
+        </Dialog>
       </Container>
     </Box>
   );

@@ -27,7 +27,7 @@ import {
   Wifi,
   RadioButtonUnchecked
 } from '@mui/icons-material';
-import { useMQTT } from '../hooks/useMQTT';
+import { useMQTTContext } from '../context/MQTTContext';
 
 interface MQTTProcessMonitorProps {
   open: boolean;
@@ -43,7 +43,7 @@ interface ProcessStep {
 }
 
 export const MQTTProcessMonitor: React.FC<MQTTProcessMonitorProps> = ({ open, onClose }) => {
-  const { isConnected, connectionError, messages } = useMQTT();
+  const { isConnected, connectionError, messages } = useMQTTContext();
   const [steps, setSteps] = useState<ProcessStep[]>([]);
   const [isRetrying, setIsRetrying] = useState(false);
 

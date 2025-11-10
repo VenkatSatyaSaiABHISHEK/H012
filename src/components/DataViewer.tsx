@@ -296,7 +296,39 @@ export const DataViewer: React.FC<DataViewerProps> = ({ open, onClose }) => {
                   <Card>
                     <CardContent sx={{ textAlign: 'center' }}>
                       <Typography variant="h4" color="warning.main">
-                        {(filteredData.filter(r => r.state === 'ON').length * 1).toFixed(1)}h
+                        {(() => {
+                          // Calculate ACTUAL total runtime by pairing ON/OFF events
+                          let totalMinutes = 0;
+                          const sortedData = [...filteredData].sort((a, b) => 
+                            new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+                          );
+                          
+                          const deviceSessions = new Map();
+                          
+                          sortedData.forEach(record => {
+                            if (record.state === 'ON') {
+                              // Find corresponding OFF event
+                              const offEvent = sortedData.find(r => 
+                                r.device_id === record.device_id && 
+                                r.state === 'OFF' &&
+                                new Date(r.created_at) > new Date(record.created_at)
+                              );
+                              
+                              if (offEvent) {
+                                const onTime = new Date(record.created_at);
+                                const offTime = new Date(offEvent.created_at);
+                                const duration = (offTime.getTime() - onTime.getTime()) / (1000 * 60);
+                                if (duration > 0 && duration < 1440) { // Valid session (< 24 hours)
+                                  totalMinutes += duration;
+                                }
+                              }
+                            }
+                          });
+                          
+                          return totalMinutes < 60 
+                            ? `${Math.round(totalMinutes)}m`
+                            : `${(totalMinutes / 60).toFixed(1)}h`;
+                        })()}
                       </Typography>
                       <Typography variant="body2">Total Runtime</Typography>
                     </CardContent>
@@ -306,10 +338,37 @@ export const DataViewer: React.FC<DataViewerProps> = ({ open, onClose }) => {
                   <Card>
                     <CardContent sx={{ textAlign: 'center' }}>
                       <Typography variant="h4" color="error.main">
-                        {formatIndianCurrency(
-                          (filteredData.filter(r => r.state === 'ON').length * 1) * 
-                          DEVICE_POWER_RATING / 1000 * COST_PER_KWH
-                        )}
+                        {(() => {
+                          // Calculate ACTUAL cost based on real usage time
+                          let totalMinutes = 0;
+                          const sortedData = [...filteredData].sort((a, b) => 
+                            new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+                          );
+                          
+                          sortedData.forEach(record => {
+                            if (record.state === 'ON') {
+                              const offEvent = sortedData.find(r => 
+                                r.device_id === record.device_id && 
+                                r.state === 'OFF' &&
+                                new Date(r.created_at) > new Date(record.created_at)
+                              );
+                              
+                              if (offEvent) {
+                                const onTime = new Date(record.created_at);
+                                const offTime = new Date(offEvent.created_at);
+                                const duration = (offTime.getTime() - onTime.getTime()) / (1000 * 60);
+                                if (duration > 0 && duration < 1440) {
+                                  totalMinutes += duration;
+                                }
+                              }
+                            }
+                          });
+                          
+                          const hours = totalMinutes / 60;
+                          const units = (hours * DEVICE_POWER_RATING) / 1000;
+                          const cost = units * COST_PER_KWH;
+                          return formatIndianCurrency(cost);
+                        })()}
                       </Typography>
                       <Typography variant="body2">Estimated Cost</Typography>
                     </CardContent>
@@ -332,7 +391,82 @@ export const DataViewer: React.FC<DataViewerProps> = ({ open, onClose }) => {
                   </TableHead>
                   <TableBody>
                     {filteredData.map((record, index) => {
-                      const hours = 1; // Estimate 1 hour per ON event
+                      // Calculate actual duration by finding the corresponding OFF event
+                      let durationMinutes = 0;
+                      let durationText = '—';
+                      
+                      if (record.state === 'ON') {
+                        // Get all events for this device, sorted chronologically (oldest first)
+                        const deviceEvents = filteredData
+                          .filter(r => r.device_id === record.device_id)
+                          .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+                        
+                        // Find current ON event in the sorted list
+                        const currentEventIndex = deviceEvents.findIndex(e => 
+                          e.created_at === record.created_at && e.state === 'ON'
+                        );
+                        
+                        // Look for the immediate next OFF event after this ON event
+                        let correspondingOffEvent = null;
+                        
+                        for (let i = currentEventIndex + 1; i < deviceEvents.length; i++) {
+                          if (deviceEvents[i].state === 'OFF') {
+                            correspondingOffEvent = deviceEvents[i];
+                            break;
+                          }
+                        }
+                        
+                        if (correspondingOffEvent) {
+                          const onTime = new Date(record.created_at);
+                          const offTime = new Date(correspondingOffEvent.created_at);
+                          durationMinutes = (offTime.getTime() - onTime.getTime()) / (1000 * 60);
+                          
+                          // Validate duration - allow up to 3 days but reject obvious data errors
+                          // Legitimate scenarios: AC running all day, heaters, pumps, security devices
+                          if (durationMinutes > 0 && durationMinutes <= 4320) { // Max 3 days (72 hours)
+                            // Format duration properly
+                            if (durationMinutes < 1) {
+                              const seconds = Math.round(durationMinutes * 60);
+                              durationText = `${seconds}s`;
+                            } else if (durationMinutes < 60) {
+                              durationText = `${Math.round(durationMinutes)}m`;
+                            } else {
+                              const hours = Math.floor(durationMinutes / 60);
+                              const mins = Math.round(durationMinutes % 60);
+                              durationText = mins > 0 ? `${hours}h ${mins}m` : `${hours}h`;
+                            }
+                          } else {
+                            // Duration is unrealistic (too long or negative)
+                            durationText = durationMinutes <= 0 ? 'Invalid' : 'Too long (>3 days)';
+                            durationMinutes = 0; // Don't include in totals
+                          }
+                        } else {
+                          // Check if this device is currently ON by looking at the most recent event
+                          const mostRecentEvent = filteredData.find(r => r.device_id === record.device_id);
+                          if (mostRecentEvent && mostRecentEvent.state === 'ON' && mostRecentEvent.created_at === record.created_at) {
+                            // This is the most recent event and it's ON - device is running
+                            const onTime = new Date(record.created_at);
+                            const now = new Date();
+                            const currentDuration = (now.getTime() - onTime.getTime()) / (1000 * 60);
+                            
+                            if (currentDuration < 1) {
+                              const seconds = Math.round(currentDuration * 60);
+                              durationText = `Running... (${seconds}s)`;
+                            } else if (currentDuration < 60) {
+                              durationText = `Running... (${Math.round(currentDuration)}m)`;
+                            } else {
+                              const hours = Math.floor(currentDuration / 60);
+                              const mins = Math.round(currentDuration % 60);
+                              durationText = `Running... (${hours}h ${mins}m)`;
+                            }
+                          } else {
+                            // This ON event has no corresponding OFF event and it's not the current state
+                            durationText = 'No OFF event';
+                          }
+                        }
+                      }
+                      
+                      const hours = durationMinutes / 60;
                       const units = (hours * DEVICE_POWER_RATING) / 1000;
                       const cost = units * COST_PER_KWH;
                       
@@ -364,13 +498,13 @@ export const DataViewer: React.FC<DataViewerProps> = ({ open, onClose }) => {
                             />
                           </TableCell>
                           <TableCell>
-                            {record.state === 'ON' ? `${hours.toFixed(2)}h` : '—'}
+                            {durationText}
                           </TableCell>
                           <TableCell>
-                            {record.state === 'ON' ? units.toFixed(3) : '—'}
+                            {record.state === 'ON' && durationMinutes > 0 ? units.toFixed(3) : '—'}
                           </TableCell>
                           <TableCell>
-                            {record.state === 'ON' ? formatIndianCurrency(cost) : '—'}
+                            {record.state === 'ON' && durationMinutes > 0 ? formatIndianCurrency(cost) : '—'}
                           </TableCell>
                         </TableRow>
                       );

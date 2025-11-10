@@ -5,6 +5,8 @@ import { MantineProvider } from '@mantine/core';
 import { Dashboard } from './components/Dashboard';
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import GraphsPage from './components/GraphsPage';
+import MQTTBackendPage from './components/MQTTBackendPage';
+import { MQTTProvider } from './context/MQTTContext';
 
 const App: React.FC = () => {
   const [mode, setMode] = useState<'light' | 'dark'>('dark'); // Default to dark mode
@@ -98,12 +100,15 @@ const App: React.FC = () => {
       <ThemeProvider theme={theme}>
         <CssBaseline />
         <Notifications position="top-right" />
-        <BrowserRouter>
-          <Routes>
-            <Route path="/" element={<Dashboard toggleTheme={toggleTheme} />} />
-            <Route path="/graphs" element={<GraphsPage toggleTheme={toggleTheme} />} />
-          </Routes>
-        </BrowserRouter>
+        <MQTTProvider>
+          <BrowserRouter>
+            <Routes>
+              <Route path="/" element={<Dashboard toggleTheme={toggleTheme} />} />
+              <Route path="/graphs" element={<GraphsPage toggleTheme={toggleTheme} />} />
+              <Route path="/mqtt-backend" element={<MQTTBackendPage toggleTheme={toggleTheme} />} />
+            </Routes>
+          </BrowserRouter>
+        </MQTTProvider>
       </ThemeProvider>
     </MantineProvider>
   );

@@ -24,11 +24,36 @@ const mqttConfigs = [
 ]
 
 export const useMQTT = (): MqttHook => {
+  // Initialize state with localStorage persistence
   const [client, setClient] = React.useState<MqttClient | null>(null)
-  const [isConnected, setIsConnected] = React.useState(false)
-  const [messages, setMessages] = React.useState<Record<string, string>>({})
-  const [connectionError, setConnectionError] = React.useState<string | null>(null)
-  const [connectionAttempts, setConnectionAttempts] = React.useState(0)
+  const [isConnected, setIsConnected] = React.useState(() => {
+    try {
+      return localStorage.getItem('mqtt_connected') === 'true';
+    } catch {
+      return false;
+    }
+  })
+  const [messages, setMessages] = React.useState<Record<string, string>>(() => {
+    try {
+      return JSON.parse(localStorage.getItem('mqtt_messages') || '{}');
+    } catch {
+      return {};
+    }
+  })
+  const [connectionError, setConnectionError] = React.useState<string | null>(() => {
+    try {
+      return localStorage.getItem('mqtt_error');
+    } catch {
+      return null;
+    }
+  })
+  const [connectionAttempts, setConnectionAttempts] = React.useState(() => {
+    try {
+      return Number(localStorage.getItem('mqtt_attempts') || '0');
+    } catch {
+      return 0;
+    }
+  })
 
   const tryConnection = async (configIndex: number = 0): Promise<MqttClient | null> => {
     if (configIndex >= mqttConfigs.length) {
@@ -98,6 +123,8 @@ export const useMQTT = (): MqttHook => {
 
         setClient(mqttClient)
         setIsConnected(true)
+        setConnectionError(null)
+        setConnectionAttempts(0)
         
         // Subscribe to IP discovery topics for all devices
         mqttClient.subscribe('sinric/+/ip')
@@ -156,10 +183,63 @@ export const useMQTT = (): MqttHook => {
       }
     }, [])
 
+  // Persist connection state to localStorage
+  React.useEffect(() => {
+    try {
+      localStorage.setItem('mqtt_connected', isConnected.toString());
+    } catch (e) {
+      console.warn('Failed to persist MQTT connection state:', e);
+    }
+  }, [isConnected]);
+
+  React.useEffect(() => {
+    try {
+      localStorage.setItem('mqtt_messages', JSON.stringify(messages));
+    } catch (e) {
+      console.warn('Failed to persist MQTT messages:', e);
+    }
+  }, [messages]);
+
+  React.useEffect(() => {
+    try {
+      if (connectionError) {
+        localStorage.setItem('mqtt_error', connectionError);
+      } else {
+        localStorage.removeItem('mqtt_error');
+      }
+    } catch (e) {
+      console.warn('Failed to persist MQTT error:', e);
+    }
+  }, [connectionError]);
+
+  React.useEffect(() => {
+    try {
+      localStorage.setItem('mqtt_attempts', connectionAttempts.toString());
+    } catch (e) {
+      console.warn('Failed to persist MQTT attempts:', e);
+    }
+  }, [connectionAttempts]);
+
+  // Initialize connection
   React.useEffect(() => {
     connectMQTT()
 
+    // Handle page visibility changes to refresh connection
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible' && !isConnected) {
+        console.log('🔄 Page became visible, checking MQTT connection...')
+        setTimeout(() => {
+          if (!isConnected) {
+            connectMQTT()
+          }
+        }, 1000)
+      }
+    }
+
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+
     return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
       if (client) {
         console.log('🔌 Cleaning up MQTT connection')
         client.end(true)

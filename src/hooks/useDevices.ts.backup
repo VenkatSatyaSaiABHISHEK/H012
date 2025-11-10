@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect } from 'react';
 import { config } from '../config';
 import { supabase } from '../config/supabase';
 
@@ -136,7 +136,65 @@ export const useDevices = (pollMs = 10000) => {
     return `${locations[locationIndex]} ${deviceTypes[typeIndex]}`;
   };
 
-  const fetchDevices = useCallback(async () => {
+  const startMQTTDiscovery = () => {
+    // Use shared MQTT client instead of creating a new connection
+    if (sharedMqttClient && mqttConnected) {
+      console.log('🔗 Using shared MQTT connection for device discovery');
+      
+      // Subscribe to all SinricPro status topics using shared client
+      sharedMqttClient.subscribe('sinric/+/status');
+      sharedMqttClient.subscribe('sinric/+/ip'); 
+      console.log('📡 Subscribed to device topics via shared MQTT connection');
+      
+      return sharedMqttClient;
+    } else {
+      console.log('⏳ Waiting for shared MQTT connection to be ready...');
+      return null;
+    }
+  };
+
+  // Handle MQTT messages from the shared context
+  useEffect(() => {
+    if (mqttMessages && Object.keys(mqttMessages).length > 0) {
+      Object.entries(mqttMessages).forEach(([topic, message]) => {
+      const messageStr = message.toString().trim();
+      console.log(`📥 Discovery - Topic: ${topic}, Message: "${messageStr}"`);
+      
+      // Extract device ID from topic: sinric/{deviceId}/status
+      const match = topic.match(/^sinric\/([^\/]+)\/status$/);
+      if (match) {
+        const deviceId = match[1];
+        const state = messageStr === 'ON' ? 'ON' : 'OFF';
+        
+        // Update or add device
+        setDevices(prev => {
+          const existingIndex = prev.findIndex(d => d.deviceId === deviceId);
+          const updatedDevice: SimpleDevice = {
+            deviceId,
+            gpio: 0,
+            state,
+            name: getDefaultDeviceName(deviceId),
+            lastSeen: new Date().toISOString()
+          };
+          
+          if (existingIndex >= 0) {
+            // Update existing device
+            const updated = [...prev];
+            updated[existingIndex] = { ...updated[existingIndex], ...updatedDevice };
+            console.log(`🔄 Updated device: ${deviceId} -> ${state}`);
+            return updated;
+          } else {
+            // Add new device
+            console.log(`➕ Discovered new device: ${deviceId} -> ${state}`);
+            return [...prev, updatedDevice];
+          }
+        });
+      });
+    }
+  }, [mqttMessages]);
+  };
+
+  const fetchDevices = async () => {
     setLoading(true);
     setError(null);
     
@@ -154,7 +212,7 @@ export const useDevices = (pollMs = 10000) => {
       if (discoveredDevices.length === 0) {
         const esp32Devices = await fetchDevicesFromESP32();
         if (esp32Devices.length > 0) {
-          discoveredDevices = esp32Devices.map((d: any) => ({
+          discoveredDevices = esp32Devices.map(d => ({
             ...d,
             name: d.name || getDefaultDeviceName(d.deviceId)
           }));
@@ -180,21 +238,27 @@ export const useDevices = (pollMs = 10000) => {
     } finally {
       setLoading(false);
     }
-  }, []);
+  };
 
   useEffect(() => {
     // Start with initial fetch
     fetchDevices();
     
-    // Periodic refresh
-    const refreshInterval = setInterval(fetchDevices, pollMs);
+    // Start MQTT discovery for real-time updates
+    const mqttClient = startMQTTDiscovery();
+    
+    // Periodic refresh (less frequent since we have real-time updates)
+    const refreshInterval = setInterval(fetchDevices, pollMs * 3); // 3x slower refresh
     
     return () => {
       clearInterval(refreshInterval);
+      if (mqttClient) {
+        mqttClient.end();
+      }
     };
-  }, [fetchDevices, pollMs]);
+  }, [pollMs]);
 
-  const connectedCount = devices.filter((d: SimpleDevice) => d.state === 'ON').length;
+  const connectedCount = devices.filter(d => d.state === 'ON').length;
 
   return { 
     devices, 

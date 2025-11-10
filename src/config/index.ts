@@ -5,11 +5,11 @@ const env = process.env;
 export const config = {
   mqtt: {
     broker: env.REACT_APP_MQTT_BROKER || 'e2a792bf.ala.eu-central-1.emqxsl.com',
-    port: Number(env.REACT_APP_MQTT_PORT) || 8083, // Use standard WebSocket port
+    port: Number(env.REACT_APP_MQTT_PORT) || 8084, // Use secure WebSocket port (WSS)
     username: env.REACT_APP_MQTT_USERNAME || 'esp32_1',
     password: env.REACT_APP_MQTT_PASSWORD || '321654987',
     clientId: env.REACT_APP_MQTT_CLIENT_ID || ('dashboard_' + Math.random().toString(16).substr(2, 8)),
-    protocol: env.REACT_APP_MQTT_PROTOCOL || 'ws', // Use WebSocket (non-secure first)
+    protocol: env.REACT_APP_MQTT_PROTOCOL || 'wss', // Use secure WebSocket first
   },
   supabase: {
     url: env.REACT_APP_SUPABASE_URL || 'https://jiiopewohvvhgmiknpln.supabase.co',

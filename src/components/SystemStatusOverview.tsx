@@ -28,7 +28,8 @@ import {
 } from '@mui/icons-material';
 import { supabase } from '../config/supabase';
 import { config } from '../config';
-import { useMQTT } from '../hooks/useMQTT';
+import { useMQTTContext } from '../context/MQTTContext';
+import { useNavigate } from 'react-router-dom';
 import { SupabaseDataViewer } from './SupabaseDataViewer';
 import { MQTTProcessMonitor } from './MQTTProcessMonitor';
 import { SupabaseProcessMonitor } from './SupabaseProcessMonitor';
@@ -50,14 +51,16 @@ interface SystemStatusOverviewProps {
 }
 
 export const SystemStatusOverview: React.FC<SystemStatusOverviewProps> = ({ onShowDiagnostics }) => {
-  // Use the MQTT hook for real-time connection status
+  const navigate = useNavigate();
+  
+  // Use the MQTT context for real-time connection status
   const { 
     isConnected: mqttConnected, 
     connectionError: mqttError, 
     messages: mqttMessages, 
     reconnect: reconnectMQTT, 
     connectionAttempts 
-  } = useMQTT();
+  } = useMQTTContext();
   
   const [services, setServices] = useState<ServiceStatus[]>([
     {
@@ -93,65 +96,168 @@ export const SystemStatusOverview: React.FC<SystemStatusOverviewProps> = ({ onSh
   const [lastUpdate, setLastUpdate] = useState(new Date());
   const [showDataViewer, setShowDataViewer] = useState(false);
   
+  // Device status tracking
+  const [deviceStatuses, setDeviceStatuses] = useState<Record<string, {
+    deviceId: string;
+    lastSeen: Date;
+    isOnline: boolean;
+    messageCount: number;
+  }>>({});
+  const [deviceOfflineThreshold] = useState(30000); // 30 seconds
+  
   // Process monitor dialogs
   const [showMQTTMonitor, setShowMQTTMonitor] = useState(false);
   const [showSupabaseMonitor, setShowSupabaseMonitor] = useState(false);
   const [showESP32Monitor, setShowESP32Monitor] = useState(false);
   const [showDeviceDiscoveryMonitor, setShowDeviceDiscoveryMonitor] = useState(false);
 
-  // Check ESP32 Controller status
+  // Check ESP32 Controller status - MQTT connection is primary success indicator
   const checkESP32Status = async () => {
-    try {
-      const esp32IP = localStorage.getItem('esp32_ip') || 'http://192.168.1.100';
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 5000);
+    const esp32IP = localStorage.getItem('esp32_ip') || '192.168.1.100';
+    
+    // If MQTT is fully connected, ESP32 is considered online
+    if (mqttConnected) {
+      // Check if we have recent device messages as extra confirmation
+      const now = Date.now();
+      const onlineDevices = Object.values(deviceStatuses).filter(device => 
+        now - device.lastSeen.getTime() < deviceOfflineThreshold
+      );
       
-      const response = await fetch(`${esp32IP}/status`, {
-        method: 'GET',
-        signal: controller.signal
-      });
-      
-      clearTimeout(timeoutId);
-      
-      if (response.ok) {
-        const data = await response.json();
+      if (onlineDevices.length > 0) {
+        // Both MQTT connected AND recent device messages - fully online
+        const lastDevice = onlineDevices[0];
+        const secondsAgo = Math.floor((now - lastDevice.lastSeen.getTime()) / 1000);
+        
         updateServiceStatus('ESP32 Controller', {
           status: 'connected',
-          message: `ESP32 online at ${esp32IP}`,
-          details: `✅ HTTP API: Active | 🔌 Devices: ${data.devices?.length || 0} | 📶 Network: Connected | ⚡ GPIO Control: Ready`
+          message: `ESP32-MultiSwitch-v2.1 online`,
+          details: `✅ MQTT: Active (${onlineDevices.length} devices) | ✅ Communication: ${secondsAgo}s ago | 📍 IP: ${esp32IP} | ⚡ Relay control ready`
         });
+        return;
       } else {
-        throw new (Error as any)('ESP32 not responding');
+        // MQTT connected but no recent device messages yet
+        updateServiceStatus('ESP32 Controller', {
+          status: 'connected',
+          message: `ESP32 ready (MQTT connected)`,
+          details: `✅ MQTT: Connected to broker | � Waiting for device messages | 📍 IP: ${esp32IP} | ⚡ Control system ready`
+        });
+        return;
       }
-    } catch (error: any) {
-      updateServiceStatus('ESP32 Controller', {
-        status: 'error',
-        message: 'Cannot reach ESP32',
-        details: `Check if ESP32 is powered on and WiFi connected. IP: ${localStorage.getItem('esp32_ip') || 'http://192.168.1.100'} | Expected: Your ESP32 MultiSwitch device`
-      });
     }
+    
+    // MQTT is connecting (not failed yet) - show connecting status
+    if (!mqttConnected && !mqttError) {
+      updateServiceStatus('ESP32 Controller', {
+        status: 'connecting',
+        message: 'ESP32 connecting via MQTT...',
+        details: `🔄 MQTT: Establishing connection to broker | 📍 IP: ${esp32IP} | ⏳ Please wait for connection...`
+      });
+      return;
+    }
+    
+    // MQTT connection failed - try HTTP as fallback
+    if (!mqttConnected && mqttError) {
+      const endpoints = ['/', '/status', '/info'];
+      for (const endpoint of endpoints) {
+        try {
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), 3000);
+          
+          const response = await fetch(`http://${esp32IP}${endpoint}`, {
+            method: 'GET',
+            signal: controller.signal
+          });
+          
+          clearTimeout(timeoutId);
+          
+          if (response.ok) {
+            updateServiceStatus('ESP32 Controller', {
+              status: 'warning',
+              message: 'ESP32 HTTP only (no MQTT)',
+              details: `✅ HTTP API: Active | ❌ MQTT: Disconnected | 📶 Limited functionality | 🔧 Check MQTT broker connection`
+            });
+            return;
+          }
+        } catch (error) {
+          continue;
+        }
+      }
+    }
+    
+    // Both MQTT and HTTP failed
+    updateServiceStatus('ESP32 Controller', {
+      status: 'error',
+      message: 'Cannot reach ESP32',
+      details: `❌ MQTT: ${mqttError ? `Failed (${mqttError})` : 'Disconnected'} | ❌ HTTP API: No response | 🔌 Check: Power and WiFi connection | 📍 IP: ${esp32IP}`
+    });
   };
+
+  // Track device messages for real device presence detection
+  useEffect(() => {
+    Object.entries(mqttMessages).forEach(([topic, message]) => {
+      // Track device activity for presence detection
+      const deviceIdMatch = topic.match(/sinric\/([^\/]+)\//) || topic.match(/esp32\/([^\/]+)\//);
+      if (deviceIdMatch) {
+        const deviceId = deviceIdMatch[1];
+        setDeviceStatuses(prev => ({
+          ...prev,
+          [deviceId]: {
+            deviceId,
+            lastSeen: new Date(),
+            isOnline: true,
+            messageCount: (prev[deviceId]?.messageCount || 0) + 1
+          }
+        }));
+      }
+    });
+  }, [mqttMessages]);
+
+  // Check device online status periodically
+  useEffect(() => {
+    const interval = setInterval(() => {
+      const now = new Date();
+      setDeviceStatuses(prev => {
+        const updated = { ...prev };
+        Object.keys(updated).forEach(deviceId => {
+          const timeSinceLastSeen = now.getTime() - updated[deviceId].lastSeen.getTime();
+          updated[deviceId].isOnline = timeSinceLastSeen < deviceOfflineThreshold;
+        });
+        return updated;
+      });
+    }, 5000); // Check every 5 seconds
+
+    return () => clearInterval(interval);
+  }, [deviceOfflineThreshold]);
 
   // Check MQTT status with REAL device detection
   const checkMQTTStatus = async () => {
+    const onlineDevices = Object.values(deviceStatuses).filter(d => d.isOnline).length;
+    const totalDevices = Object.keys(deviceStatuses).length;
+    
     if (mqttConnected) {
-      // Check if we have REAL device messages (not just broker connection)
-      const recentMessages = Object.keys(mqttMessages).length;
-      const hasDeviceMessages = Object.keys(mqttMessages).some(topic => 
-        topic.includes('esp32') || topic.includes('sinric') || topic.includes('device')
-      );
-      
-      if (hasDeviceMessages) {
+      if (totalDevices === 0) {
+        updateServiceStatus('MQTT Broker', {
+          status: 'warning',
+          message: 'MQTT connected, no devices detected',
+          details: `✅ Broker: Connected to ${config.mqtt.broker} | ⏳ Waiting for ESP32 devices... | 🔌 Make sure your ESP32 is powered on and connected to WiFi`
+        });
+      } else if (onlineDevices === totalDevices && onlineDevices > 0) {
         updateServiceStatus('MQTT Broker', {
           status: 'connected',
-          message: 'MQTT + Devices active',
-          details: `✅ Broker: Connected | � ESP32 Device: Online | 📨 Messages: ${recentMessages} recent | 🔌 Real device communication active`
+          message: `MQTT + ${onlineDevices} ESP32 device${onlineDevices > 1 ? 's' : ''} online`,
+          details: `✅ Broker: Connected | 🔌 ESP32 Devices: All ${onlineDevices} online | 📨 Real device communication active`
+        });
+      } else if (onlineDevices > 0) {
+        updateServiceStatus('MQTT Broker', {
+          status: 'warning',
+          message: `${onlineDevices}/${totalDevices} ESP32 devices online`,
+          details: `✅ Broker: Connected | ⚠️ ESP32 Devices: ${onlineDevices}/${totalDevices} online | 🔌 Check offline devices`
         });
       } else {
         updateServiceStatus('MQTT Broker', {
-          status: 'warning',
-          message: 'MQTT broker connected, NO devices',
-          details: `⚠️ Broker: ${config.mqtt.broker} Connected | ❌ ESP32 Device: Offline | 🔌 Check if your ESP32 is powered on and connected to WiFi | 🔄 Click to retry`
+          status: 'error',
+          message: `MQTT connected, all ${totalDevices} ESP32 devices offline`,
+          details: `✅ Broker: Connected | ❌ ESP32 Devices: All ${totalDevices} offline (no messages in 30s) | 🔌 Check if ESP32 devices are powered and connected`
         });
       }
     } else if (mqttError) {
@@ -441,14 +547,8 @@ export const SystemStatusOverview: React.FC<SystemStatusOverviewProps> = ({ onSh
                     setShowESP32Monitor(true);
                     break;
                   case 'MQTT Broker':
-                    // If connection failed multiple times, offer retry
-                    if (connectionAttempts >= 10 || service.status === 'warning') {
-                      if (window.confirm('🔄 Retry MQTT connection?\n\nThis will attempt to reconnect to your MQTT broker and check for ESP32 devices.')) {
-                        reconnectMQTT();
-                      }
-                    } else {
-                      setShowMQTTMonitor(true);
-                    }
+                    // Navigate to dedicated MQTT backend monitoring page
+                    navigate('/mqtt-backend');
                     break;
                   case 'Supabase Database':
                     setShowSupabaseMonitor(true);
