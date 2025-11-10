@@ -102,8 +102,8 @@ module.exports = {
         ],
         plugins: [
             ['@babel/plugin-transform-runtime', { 
-                loose: true,
-                corejs: 3 // Use core-js for polyfills
+                loose: true
+                // Removed corejs: 3 to prevent global-this polyfill conflicts
             }],
             ['@babel/plugin-transform-class-properties', { loose: true }],
             ['@babel/plugin-transform-private-methods', { loose: true }],
