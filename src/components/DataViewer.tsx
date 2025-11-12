@@ -31,11 +31,13 @@ import {
   ElectricBolt,
   CurrencyRupee,
   AccessTime,
-  TrendingUp
+  TrendingUp,
+  CalendarMonth
 } from '@mui/icons-material';
 import { supabase } from '../config/supabase';
 import { config } from '../config';
 import { format, parseISO, startOfMonth, endOfMonth, isWithinInterval } from 'date-fns';
+import BillingDashboard from './BillingDashboard';
 
 interface DataViewerProps {
   open: boolean;
@@ -232,6 +234,7 @@ export const DataViewer: React.FC<DataViewerProps> = ({ open, onClose }) => {
         <Tabs value={tabValue} onChange={(e, newValue) => setTabValue(newValue)} sx={{ px: 3, pt: 2 }}>
           <Tab label="Raw Data" icon={<TableChart />} />
           <Tab label="Monthly Bills" icon={<CurrencyRupee />} />
+          <Tab label="Indian Billing" icon={<CalendarMonth />} />
         </Tabs>
 
         <Box sx={{ p: 3 }}>
@@ -562,6 +565,12 @@ export const DataViewer: React.FC<DataViewerProps> = ({ open, onClose }) => {
                   </CardContent>
                 </Card>
               ))}
+            </Box>
+          )}
+
+          {tabValue === 2 && (
+            <Box sx={{ p: 0, m: -3 }}>
+              <BillingDashboard />
             </Box>
           )}
         </Box>
