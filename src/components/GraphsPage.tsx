@@ -36,6 +36,8 @@ import {
 import { useTheme } from '@mui/material/styles';
 import { supabase } from '../config/supabase';
 import { addSampleDataToDatabase } from '../utils/sampleData';
+import { useDemoMode } from '../context/DemoModeContext';
+import { fakeDataService } from '../utils/fakeDataService';
 import { 
   ResponsiveContainer, 
   LineChart, 
@@ -77,6 +79,7 @@ interface GraphsPageProps {
 
 export const GraphsPage: React.FC<GraphsPageProps> = ({ toggleTheme }) => {
   const theme = useTheme();
+  const { isDemoMode } = useDemoMode();
   const [selectedDevice, setSelectedDevice] = useState<string>('all');
   const [devices, setDevices] = useState<string[]>([]);
   const [events, setEvents] = useState<EventData[]>([]);
@@ -139,34 +142,74 @@ export const GraphsPage: React.FC<GraphsPageProps> = ({ toggleTheme }) => {
       setLoading(true);
       setError(null);
 
-      // Calculate time range
-      const now = new Date();
-      const timeLimit = new Date();
-      switch (timeRange) {
-        case '1h':
-          timeLimit.setHours(now.getHours() - 1);
-          break;
-        case '24h':
-          timeLimit.setDate(now.getDate() - 1);
-          break;
-        case '7d':
-          timeLimit.setDate(now.getDate() - 7);
-          break;
-        case '30d':
-          timeLimit.setDate(now.getDate() - 30);
-          break;
+      let eventData: EventData[] = [];
+
+      if (isDemoMode) {
+        // Use fake data in demo mode
+        const now = new Date();
+        const timeLimit = new Date();
+        switch (timeRange) {
+          case '1h':
+            timeLimit.setHours(now.getHours() - 1);
+            break;
+          case '24h':
+            timeLimit.setDate(now.getDate() - 1);
+            break;
+          case '7d':
+            timeLimit.setDate(now.getDate() - 7);
+            break;
+          case '30d':
+            timeLimit.setDate(now.getDate() - 30);
+            break;
+        }
+
+        // Get fake historical events
+        const fakeEvents = fakeDataService.getAllHistoricalEvents();
+        eventData = fakeEvents
+          .filter(event => {
+            const eventDate = new Date(event.created_at);
+            return eventDate >= timeLimit && eventDate <= now;
+          })
+          .map((event, index) => ({
+            id: index,
+            device_id: event.device_id,
+            event_type: event.state,
+            value: event.state,
+            created_at: event.created_at,
+            ts: event.created_at
+          }))
+          .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+          .slice(0, 1000);
+      } else {
+        // Calculate time range for real data
+        const now = new Date();
+        const timeLimit = new Date();
+        switch (timeRange) {
+          case '1h':
+            timeLimit.setHours(now.getHours() - 1);
+            break;
+          case '24h':
+            timeLimit.setDate(now.getDate() - 1);
+            break;
+          case '7d':
+            timeLimit.setDate(now.getDate() - 7);
+            break;
+          case '30d':
+            timeLimit.setDate(now.getDate() - 30);
+            break;
+        }
+
+        const { data, error } = await supabase
+          .from('events')
+          .select('*')
+          .gte('created_at', timeLimit.toISOString())
+          .order('created_at', { ascending: false })
+          .limit(1000);
+
+        if (error) throw error;
+        eventData = data || [];
       }
 
-      const { data, error } = await supabase
-        .from('events')
-        .select('*')
-        .gte('created_at', timeLimit.toISOString())
-        .order('created_at', { ascending: false })
-        .limit(1000);
-
-      if (error) throw error;
-
-      const eventData = data || [];
       setEvents(eventData);
 
       // Extract unique device IDs
@@ -313,7 +356,45 @@ export const GraphsPage: React.FC<GraphsPageProps> = ({ toggleTheme }) => {
                 </Box>
               </Box>
               
-              <Box display="flex" gap={2}>
+              <Box display="flex" gap={2} alignItems="center">
+                {/* Demo Mode Indicator */}
+                {isDemoMode && (
+                  <Chip 
+                    label="Demo Mode" 
+                    color="info" 
+                    size="small"
+                    sx={{ 
+                      background: 'linear-gradient(45deg, #00E5FF, #00B2CC)',
+                      color: 'white'
+                    }}
+                  />
+                )}
+                
+                {/* Data Control Buttons */}
+                {!isDemoMode && events.length === 0 && !loading && (
+                  <>
+                    <Button 
+                      onClick={generateSampleData} 
+                      size="small" 
+                      startIcon={<DataUsage />}
+                      variant="outlined"
+                      color="info"
+                    >
+                      Demo Data
+                    </Button>
+                    <Button 
+                      onClick={addRealSampleData} 
+                      size="small" 
+                      startIcon={<Add />}
+                      disabled={addingData}
+                      variant="contained"
+                      color="success"
+                    >
+                      {addingData ? 'Adding...' : 'Add Real Sample Data'}
+                    </Button>
+                  </>
+                )}
+                
                 <IconButton onClick={fetchData} color="primary" title="Refresh Data">
                   <Refresh />
                 </IconButton>
@@ -347,6 +428,45 @@ export const GraphsPage: React.FC<GraphsPageProps> = ({ toggleTheme }) => {
       </Paper>
 
       <Container maxWidth="xl" sx={{ mt: 3 }}>
+        {/* Info Bar - matching the screenshot */}
+        {!isDemoMode && events.length === 0 && !loading && !error && (
+          <Alert 
+            severity="info" 
+            sx={{ 
+              mb: 3,
+              background: theme.palette.mode === 'dark' 
+                ? 'rgba(3, 165, 251, 0.1)' 
+                : 'rgba(3, 165, 251, 0.1)',
+              borderLeft: '4px solid #03A5FB'
+            }}
+            action={
+              <Box display="flex" gap={1}>
+                <Button 
+                  onClick={generateSampleData} 
+                  size="small" 
+                  startIcon={<DataUsage />}
+                  variant="outlined"
+                  color="info"
+                >
+                  Demo Data
+                </Button>
+                <Button 
+                  onClick={addRealSampleData} 
+                  size="small" 
+                  startIcon={<Add />}
+                  disabled={addingData}
+                  variant="contained"
+                  color="success"
+                >
+                  {addingData ? 'Adding...' : 'Add Real Sample Data'}
+                </Button>
+              </Box>
+            }
+          >
+            No device data found. Try: <strong>Demo Data</strong> (temporary) or <strong>Add Real Sample Data</strong> (permanent to database).
+          </Alert>
+        )}
+
         {error && (
           <Alert 
             severity={showSampleData ? "info" : "error"} 
@@ -371,27 +491,32 @@ export const GraphsPage: React.FC<GraphsPageProps> = ({ toggleTheme }) => {
             severity="info" 
             sx={{ mb: 3 }}
             action={
-              <Box display="flex" gap={1}>
-                <Button 
-                  onClick={generateSampleData} 
-                  size="small" 
-                  startIcon={<DataUsage />}
-                >
-                  Demo Data
-                </Button>
-                <Button 
-                  onClick={addRealSampleData} 
-                  size="small" 
-                  startIcon={<Add />}
-                  disabled={addingData}
-                  variant="contained"
-                >
-                  {addingData ? 'Adding...' : 'Add Real Sample Data'}
-                </Button>
-              </Box>
+              !isDemoMode && (
+                <Box display="flex" gap={1}>
+                  <Button 
+                    onClick={generateSampleData} 
+                    size="small" 
+                    startIcon={<DataUsage />}
+                  >
+                    Demo Data
+                  </Button>
+                  <Button 
+                    onClick={addRealSampleData} 
+                    size="small" 
+                    startIcon={<Add />}
+                    disabled={addingData}
+                    variant="contained"
+                  >
+                    {addingData ? 'Adding...' : 'Add Real Sample Data'}
+                  </Button>
+                </Box>
+              )
             }
           >
-            📊 No device data found. Try: <strong>Demo Data</strong> (temporary) or <strong>Add Real Sample Data</strong> (permanent to database).
+            {isDemoMode 
+              ? "📊 No data available for the selected time range. Try selecting a different time period." 
+              : "📊 No device data found. Try: Demo Data (temporary) or Add Real Sample Data (permanent to database)."
+            }
           </Alert>
         )}
 

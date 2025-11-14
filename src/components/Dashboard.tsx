@@ -53,6 +53,8 @@ import { DeviceUsageSummary } from './DeviceUsageSummary';
 import useDevices from '../hooks/useDevices';
 import { Link as RouterLink } from 'react-router-dom';
 import { useMQTTContext } from '../context/MQTTContext';
+import { useDemoMode } from '../context/DemoModeContext';
+import { fakeDataService } from '../utils/fakeDataService';
 
 interface DashboardProps {
   toggleTheme: () => void;
@@ -60,6 +62,7 @@ interface DashboardProps {
 
 export const Dashboard: React.FC<DashboardProps> = ({ toggleTheme }) => {
   const theme = useTheme();
+  const { isDemoMode } = useDemoMode();
   const { isConnected: mqttConnected, connectionError } = useMQTTContext();
   const { devices: polledDevices, loading: devicesLoading, connectedCount, refresh, error } = useDevices(8000);
   const [settingsOpen, setSettingsOpen] = React.useState(false);
@@ -70,15 +73,60 @@ export const Dashboard: React.FC<DashboardProps> = ({ toggleTheme }) => {
   const [showRuntimeDebug, setShowRuntimeDebug] = React.useState(false);
   const [registeredDevices, setRegisteredDevices] = React.useState<Array<{id: string, name: string}>>([]);
   
+  // Demo mode state
+  const [demoDevices, setDemoDevices] = React.useState(fakeDataService.getDevices());
+  const [demoStats, setDemoStats] = React.useState(fakeDataService.getStats());
+  
+  // Use demo or real data based on mode
+  const currentDevices = isDemoMode ? demoDevices.map(d => ({
+    deviceId: d.id,
+    name: d.name,
+    state: d.state,
+    lastSeen: d.lastChanged.toISOString(),
+    powerRating: d.powerRating,
+    location: d.location
+  })) : polledDevices;
+  const currentConnectedCount = isDemoMode ? demoStats.activeDevices : connectedCount;
+  const currentMqttConnected = isDemoMode ? fakeDataService.getMQTTStatus().connected : mqttConnected;
+  const currentLoading = isDemoMode ? false : devicesLoading;
+  
   // Use discovered devices from the hook
   React.useEffect(() => {
-    const deviceList = polledDevices.map(device => ({
-      id: device.deviceId,
-      name: device.name || getDeviceName(device.deviceId)
-    }));
+    const deviceList = isDemoMode 
+      ? demoDevices.map(device => ({
+          id: device.id,
+          name: device.name
+        }))
+      : polledDevices.map(device => ({
+          id: device.deviceId,
+          name: device.name || getDeviceName(device.deviceId)
+        }));
     
     setRegisteredDevices(deviceList);
-  }, [polledDevices]);
+  }, [polledDevices, isDemoMode, demoDevices]);
+
+  // Subscribe to demo mode updates
+  React.useEffect(() => {
+    if (isDemoMode) {
+      const unsubscribe = fakeDataService.subscribe((event) => {
+        if (event.type === 'device_state_changed') {
+          setDemoDevices(fakeDataService.getDevices());
+          setDemoStats(fakeDataService.getStats());
+        }
+      });
+      
+      // Update demo data every 30 seconds
+      const interval = setInterval(() => {
+        setDemoDevices(fakeDataService.getDevices());
+        setDemoStats(fakeDataService.getStats());
+      }, 30000);
+      
+      return () => {
+        unsubscribe();
+        clearInterval(interval);
+      };
+    }
+  }, [isDemoMode]);
 
   // Helper function to generate friendly device names
   const getDeviceName = (deviceId: string): string => {
@@ -139,6 +187,16 @@ export const Dashboard: React.FC<DashboardProps> = ({ toggleTheme }) => {
   React.useEffect(() => {
     const loadTodayUsage = async () => {
       try {
+        // Use fake data in demo mode
+        if (isDemoMode) {
+          // Generate realistic runtime for demo (5-8 hours typical daily usage)
+          const baseRuntime = 6 * 60; // 6 hours in minutes
+          const variation = Math.sin(Date.now() / (1000 * 60 * 60 * 24)) * 120; // ±2 hours variation
+          const fakeRuntime = baseRuntime + Math.abs(variation);
+          setTodayRuntime(fakeRuntime);
+          return;
+        }
+
         const today = new Date();
         const startOfToday = new Date(today.getFullYear(), today.getMonth(), today.getDate());
         const endOfToday = new Date(startOfToday);
@@ -275,8 +333,13 @@ export const Dashboard: React.FC<DashboardProps> = ({ toggleTheme }) => {
 
   // Calculate longest running device session
   const getLongestSession = (): string => {
+    if (isDemoMode) {
+      // Generate realistic longest session for demo (1-4 hours)
+      const sessions = ['1h 45m', '2h 15m', '3h 20m', '2h 35m', '4h 10m', '1h 55m'];
+      const sessionIndex = Math.floor(Date.now() / (1000 * 60 * 60 * 24)) % sessions.length;
+      return sessions[sessionIndex];
+    }
     // This would come from real session data
-    // For now, simulate
     if (activeDevices === 0) return '0m';
     return '2h 35m'; // Simulated longest session
   };
@@ -290,15 +353,16 @@ export const Dashboard: React.FC<DashboardProps> = ({ toggleTheme }) => {
           : 'linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%)',
       }}
     >
-      <Container maxWidth="xl" sx={{ px: { xs: 1, sm: 2, md: 3 } }}>
-        <Box py={{ xs: 2, sm: 3, md: 4 }}>
+      <Container maxWidth="xl" sx={{ px: { xs: 0.5, sm: 2, md: 3 } }}>
+        <Box py={{ xs: 1, sm: 2, md: 3 }}>
           {/* Enhanced Header */}
           <Paper 
             elevation={0}
             sx={{ 
-              p: { xs: 2, sm: 3 }, 
-              mb: { xs: 2, sm: 3, md: 4 }, 
-              borderRadius: { xs: 3, sm: 4 },
+              p: { xs: 1.5, sm: 2, md: 3 }, 
+              mb: { xs: 1.5, sm: 2, md: 3 }, 
+              borderRadius: { xs: 2, sm: 3, md: 4 },
+              mx: { xs: 0.5, sm: 0 },
               background: theme.palette.mode === 'dark' 
                 ? 'rgba(26,26,26,0.8)' 
                 : 'rgba(255,255,255,0.8)',
@@ -306,68 +370,123 @@ export const Dashboard: React.FC<DashboardProps> = ({ toggleTheme }) => {
               border: `1px solid ${theme.palette.divider}`,
             }}
           >
-            <Box display="flex" justifyContent="space-between" alignItems="center">
-              <Box display="flex" alignItems="center" gap={2}>
+            <Box 
+              display="flex" 
+              justifyContent="space-between" 
+              alignItems="center"
+              flexWrap="wrap"
+              gap={{ xs: 1, sm: 2 }}
+            >
+              <Box display="flex" alignItems="center" gap={{ xs: 1, sm: 2 }} minWidth={0} flex={1}>
                 <Avatar 
                   sx={{ 
                     background: `linear-gradient(45deg, ${theme.palette.primary.main}, ${theme.palette.secondary.main})`,
-                    width: 56,
-                    height: 56
+                    width: { xs: 40, sm: 48, md: 56 },
+                    height: { xs: 40, sm: 48, md: 56 }
                   }}
                 >
-                  <Home sx={{ fontSize: 28 }} />
+                  <Home sx={{ fontSize: { xs: 20, sm: 24, md: 28 } }} />
                 </Avatar>
-                <Box>
-                  <Typography variant="h4" sx={{ fontWeight: 700, mb: 0.5 }}>
+                <Box minWidth={0} flex={1}>
+                  <Typography 
+                    variant="h4" 
+                    sx={{ 
+                      fontWeight: 700, 
+                      mb: { xs: 0, sm: 0.5 },
+                      fontSize: { xs: '1.1rem', sm: '1.5rem', md: '2rem' },
+                      lineHeight: 1.2
+                    }}
+                  >
                     Smart Home Hub
                   </Typography>
-                  <Typography variant="body1" color="text.secondary">
+                  <Typography 
+                    variant="body1" 
+                    color="text.secondary"
+                    sx={{ 
+                      fontSize: { xs: '0.75rem', sm: '0.875rem', md: '1rem' },
+                      display: { xs: 'none', sm: 'block' }
+                    }}
+                  >
                     Monitor and control your IoT devices
                   </Typography>
                 </Box>
               </Box>
 
-              <Box display="flex" alignItems="center" gap={1}>
+              <Box 
+                display="flex" 
+                alignItems="center" 
+                gap={{ xs: 0.5, sm: 1 }}
+                flexWrap="wrap"
+                justifyContent={{ xs: 'flex-end', sm: 'flex-start' }}
+              >
                 <Chip 
                   icon={<DeviceHub />}
-                  label={`${connectedCount}/${registeredDevices.length} Online`} 
-                  color={connectedCount === registeredDevices.length ? 'success' : 'warning'}
-                  sx={{ mr: 1 }}
+                  label={`${currentConnectedCount}/${registeredDevices.length} Online`} 
+                  color={currentConnectedCount === registeredDevices.length ? 'success' : 'warning'}
+                  size="small"
+                  sx={{ 
+                    mr: { xs: 0.5, sm: 1 },
+                    fontSize: { xs: '0.7rem', sm: '0.8125rem' },
+                    '& .MuiChip-label': {
+                      fontSize: { xs: '0.7rem', sm: '0.8125rem' }
+                    }
+                  }}
                 />
                 <Chip 
                   icon={<CloudQueue />}
-                  label={mqttConnected ? 'MQTT Connected' : connectionError ? 'MQTT Error' : 'MQTT Connecting'} 
-                  color={mqttConnected ? 'success' : connectionError ? 'error' : 'warning'}
+                  label={
+                    <Box component="span">
+                      <Box component="span" sx={{ display: { xs: 'none', sm: 'inline' } }}>
+                        {currentMqttConnected ? 'MQTT Connected' : connectionError ? 'MQTT Error' : 'MQTT Connecting'}
+                      </Box>
+                      <Box component="span" sx={{ display: { xs: 'inline', sm: 'none' } }}>
+                        {currentMqttConnected ? 'MQTT' : 'MQTT!'}
+                      </Box>
+                    </Box>
+                  }
+                  color={currentMqttConnected ? 'success' : connectionError ? 'error' : 'warning'}
                   size="small"
-                  sx={{ mr: 1 }}
+                  sx={{ 
+                    mr: { xs: 0.5, sm: 1 },
+                    fontSize: { xs: '0.65rem', sm: '0.75rem' }
+                  }}
                 />
                 <IconButton 
                   onClick={() => window.location.reload()} 
                   sx={{ 
                     background: theme.palette.background.paper,
-                    '&:hover': { background: theme.palette.action.hover }
+                    '&:hover': { background: theme.palette.action.hover },
+                    p: { xs: 0.5, sm: 1 },
+                    minWidth: { xs: 32, sm: 40 },
+                    minHeight: { xs: 32, sm: 40 }
                   }}
                 >
-                  <Refresh />
+                  <Refresh sx={{ fontSize: { xs: 18, sm: 24 } }} />
                 </IconButton>
                 <IconButton 
                   onClick={() => setDeviceManagerOpen(true)}
                   sx={{ 
                     background: theme.palette.background.paper,
-                    '&:hover': { background: theme.palette.action.hover }
+                    '&:hover': { background: theme.palette.action.hover },
+                    p: { xs: 0.5, sm: 1 },
+                    minWidth: { xs: 32, sm: 40 },
+                    minHeight: { xs: 32, sm: 40 }
                   }}
                   title="Manage Devices"
                 >
-                  <Add />
+                  <Add sx={{ fontSize: { xs: 18, sm: 24 } }} />
                 </IconButton>
                 <IconButton 
                   onClick={() => setSettingsOpen(true)}
                   sx={{ 
                     background: theme.palette.background.paper,
-                    '&:hover': { background: theme.palette.action.hover }
+                    '&:hover': { background: theme.palette.action.hover },
+                    p: { xs: 0.5, sm: 1 },
+                    minWidth: { xs: 32, sm: 40 },
+                    minHeight: { xs: 32, sm: 40 }
                   }}
                 >
-                  <Settings />
+                  <Settings sx={{ fontSize: { xs: 18, sm: 24 } }} />
                 </IconButton>
                 <IconButton 
                   component={RouterLink}
@@ -678,10 +797,10 @@ export const Dashboard: React.FC<DashboardProps> = ({ toggleTheme }) => {
           )}
           
           {!showDiagnostics && (
-            <Grid container spacing={{ xs: 2, sm: 3 }}>
+            <Grid container spacing={{ xs: 1.5, sm: 2, md: 3 }}>
               {registeredDevices.length > 0 ? (
                 registeredDevices.map(device => (
-                  <Grid item xs={12} sm={6} lg={4} xl={3} key={device.id}>
+                  <Grid item xs={12} sm={6} md={4} lg={3} xl={3} key={device.id}>
                     <DeviceCard deviceId={device.id} name={device.name} />
                   </Grid>
                 ))
@@ -690,48 +809,91 @@ export const Dashboard: React.FC<DashboardProps> = ({ toggleTheme }) => {
                   <Box 
                     sx={{ 
                       textAlign: 'center', 
-                      py: 8,
+                      py: { xs: 4, sm: 6, md: 8 },
+                      px: { xs: 2, sm: 3 },
                       background: theme.palette.mode === 'dark' 
                         ? 'rgba(26,26,26,0.8)' 
                         : 'rgba(255,255,255,0.8)',
-                      borderRadius: 4,
+                      borderRadius: { xs: 2, sm: 3, md: 4 },
                       border: `1px solid ${theme.palette.divider}`,
+                      mx: { xs: 0.5, sm: 0 }
                     }}
                   >
-                    <DeviceHub sx={{ fontSize: 64, color: theme.palette.text.secondary, opacity: 0.5, mb: 2 }} />
-                    <Typography variant="h5" sx={{ mb: 2, fontWeight: 600 }}>
+                    <DeviceHub sx={{ 
+                      fontSize: { xs: 48, sm: 56, md: 64 }, 
+                      color: theme.palette.text.secondary, 
+                      opacity: 0.5, 
+                      mb: { xs: 1, sm: 2 } 
+                    }} />
+                    <Typography 
+                      variant="h5" 
+                      sx={{ 
+                        mb: { xs: 1.5, sm: 2 }, 
+                        fontWeight: 600,
+                        fontSize: { xs: '1.1rem', sm: '1.5rem' }
+                      }}
+                    >
                       No Devices Found
                     </Typography>
-                    <Typography variant="body1" color="text.secondary" sx={{ mb: 3, maxWidth: 600, mx: 'auto' }}>
-                      {devicesLoading 
+                    <Typography 
+                      variant="body1" 
+                      color="text.secondary" 
+                      sx={{ 
+                        mb: { xs: 2, sm: 3 }, 
+                        maxWidth: { xs: '100%', sm: 500, md: 600 }, 
+                        mx: 'auto',
+                        fontSize: { xs: '0.875rem', sm: '1rem' },
+                        px: { xs: 1, sm: 0 }
+                      }}
+                    >
+                      {currentLoading 
                         ? 'Discovering devices from your SinricPro account and ESP32 controllers...'
                         : 'No devices are currently registered. Make sure your ESP32 devices are connected and running, or check your SinricPro configuration.'
                       }
                     </Typography>
-                    <Box display="flex" gap={2} justifyContent="center">
+                    <Box 
+                      display="flex" 
+                      gap={{ xs: 1, sm: 2 }} 
+                      justifyContent="center"
+                      flexWrap="wrap"
+                    >
                       <Button 
                         variant="contained" 
                         onClick={() => refresh()}
                         startIcon={<Refresh />}
-                        disabled={devicesLoading}
+                        disabled={currentLoading}
                         sx={{ 
-                          borderRadius: 3,
+                          borderRadius: { xs: 2, sm: 3 },
                           textTransform: 'none',
+                          fontSize: { xs: '0.8rem', sm: '0.875rem' },
+                          px: { xs: 2, sm: 3 },
+                          py: { xs: 0.5, sm: 1 },
+                          minHeight: { xs: 32, sm: 36 },
                           background: `linear-gradient(45deg, ${theme.palette.primary.main}, ${theme.palette.secondary.main})`
                         }}
                       >
-                        {devicesLoading ? 'Searching...' : 'Refresh Devices'}
+                        <Box component="span" sx={{ display: { xs: 'none', sm: 'inline' } }}>
+                          {currentLoading ? 'Searching...' : 'Refresh Devices'}
+                        </Box>
+                        <Box component="span" sx={{ display: { xs: 'inline', sm: 'none' } }}>
+                          {currentLoading ? 'Searching...' : 'Refresh'}
+                        </Box>
                       </Button>
                       <Button 
                         variant="outlined" 
                         onClick={() => setSetupGuideOpen(true)}
                         startIcon={<Help />}
                         sx={{ 
-                          borderRadius: 3,
-                          textTransform: 'none'
+                          borderRadius: { xs: 2, sm: 3 },
+                          textTransform: 'none',
+                          fontSize: { xs: '0.8rem', sm: '0.875rem' },
+                          px: { xs: 2, sm: 3 },
+                          py: { xs: 0.5, sm: 1 },
+                          minHeight: { xs: 32, sm: 36 }
                         }}
                       >
-                        Setup Guide
+                        <Box component="span" sx={{ display: { xs: 'none', sm: 'inline' } }}>Setup Guide</Box>
+                        <Box component="span" sx={{ display: { xs: 'inline', sm: 'none' } }}>Setup</Box>
                       </Button>
                     </Box>
                   </Box>

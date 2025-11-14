@@ -18,9 +18,18 @@ import {
   Alert,
   CircularProgress,
   Tabs,
-  Tab
+  Tab,
+  Card,
+  CardContent,
+  Grid
 } from '@mui/material';
+import {
+  SavingsOutlined,
+  PowerSettingsNew
+} from '@mui/icons-material';
 import { supabase } from '../config/supabase';
+import { useDemoMode } from '../context/DemoModeContext';
+import { fakeDataService } from '../utils/fakeDataService';
 
 interface SupabaseDataViewerProps {
   open: boolean;
@@ -48,6 +57,7 @@ interface CustomDevice {
 }
 
 export const SupabaseDataViewer: React.FC<SupabaseDataViewerProps> = ({ open, onClose }) => {
+  const { isDemoMode } = useDemoMode();
   const [events, setEvents] = useState<EventData[]>([]);
   const [devices, setDevices] = useState<CustomDevice[]>([]);
   const [loading, setLoading] = useState(false);
@@ -65,8 +75,39 @@ export const SupabaseDataViewer: React.FC<SupabaseDataViewerProps> = ({ open, on
     setError(null);
     
     try {
-      // Fetch events data (matching your table structure)
-      console.log('🔍 Fetching events data...');
+      if (isDemoMode) {
+        // Use fake data in demo mode
+        console.log('🎭 Demo mode: Using fake data');
+        const fakeEvents = fakeDataService.getAllHistoricalEvents().slice(0, 50);
+        const fakeDevices = fakeDataService.getDevices();
+        
+        // Convert fake data to match expected format
+        const eventsData = fakeEvents.map((event, index) => ({
+          id: index + 1,
+          device_id: event.device_id,
+          state: event.state,
+          created_at: event.created_at,
+          updated_at: event.created_at
+        }));
+        
+        const devicesData = fakeDevices.map((device, index) => ({
+          id: index + 1,
+          device_id: device.id,
+          name: device.name,
+          power_rating: device.powerRating,
+          location: device.location,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        }));
+        
+        setEvents(eventsData);
+        setDevices(devicesData);
+        console.log(`📊 Demo data loaded: ${eventsData.length} events, ${devicesData.length} devices`);
+        return;
+      }
+      
+      // Real mode: Fetch from Supabase
+      console.log('🔍 Real mode: Fetching from Supabase...');
       
       // First try without filters to see all data
       const { data: eventsData, error: eventsError, count } = await supabase
@@ -229,7 +270,20 @@ export const SupabaseDataViewer: React.FC<SupabaseDataViewerProps> = ({ open, on
   };
 
   return (
-    <Dialog open={open} onClose={onClose} maxWidth="lg" fullWidth>
+    <Dialog 
+      open={open} 
+      onClose={onClose} 
+      maxWidth="lg" 
+      fullWidth
+      PaperProps={{
+        sx: {
+          margin: { xs: 0.5, sm: 2 },
+          width: { xs: 'calc(100% - 8px)', sm: 'auto' },  
+          maxHeight: { xs: 'calc(100vh - 16px)', sm: 'auto' },
+          borderRadius: { xs: 1, sm: 2 }
+        }
+      }}
+    >
       <DialogTitle>
         <Box display="flex" justifyContent="space-between" alignItems="center">
           <Typography variant="h6">Supabase Database Viewer</Typography>
@@ -293,6 +347,50 @@ export const SupabaseDataViewer: React.FC<SupabaseDataViewerProps> = ({ open, on
             {error}
           </Alert>
         )}
+
+        {/* Summary Cards */}
+        <Grid container spacing={2} sx={{ mb: 3 }}>
+          <Grid item xs={12} sm={6}>
+            <Card>
+              <CardContent>
+                <Box display="flex" alignItems="center">
+                  <SavingsOutlined sx={{ mr: 1, color: 'success.main' }} />
+                  <Box>
+                    <Typography variant="h4" color="success.main">
+                      {isDemoMode 
+                        ? fakeDataService.getStats().moneySaved.toFixed(2)
+                        : '0.00'
+                      }
+                    </Typography>
+                    <Typography variant="body2" color="text.secondary">
+                      Money Saved (Last 30 Days)
+                    </Typography>
+                  </Box>
+                </Box>
+              </CardContent>
+            </Card>
+          </Grid>
+          <Grid item xs={12} sm={6}>
+            <Card>
+              <CardContent>
+                <Box display="flex" alignItems="center">
+                  <PowerSettingsNew sx={{ mr: 1, color: 'warning.main' }} />
+                  <Box>
+                    <Typography variant="h4" color="warning.main">
+                      {isDemoMode 
+                        ? fakeDataService.getStats().autoOffEvents
+                        : '0'
+                      }
+                    </Typography>
+                    <Typography variant="body2" color="text.secondary">
+                      Auto-Off Events
+                    </Typography>
+                  </Box>
+                </Box>
+              </CardContent>
+            </Card>
+          </Grid>
+        </Grid>
 
         <Tabs value={tabValue} onChange={(_, newValue) => setTabValue(newValue)} sx={{ mb: 2 }}>
           <Tab label={`Events (${events.length})`} />

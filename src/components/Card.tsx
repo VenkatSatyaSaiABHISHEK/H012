@@ -291,9 +291,16 @@ export const DeviceCard: React.FC<DeviceCardProps> = ({ deviceId, name }) => {
   return (
     <>
     <MuiCard elevation={8} sx={cardSx}>
-      <CardContent sx={{ p: 3 }}>
+      <CardContent sx={{ p: { xs: 2, sm: 2.5, md: 3 } }}>
         {/* Header Section */}
-        <Box display="flex" justifyContent="space-between" alignItems="flex-start" mb={3}>
+        <Box 
+          display="flex" 
+          justifyContent="space-between" 
+          alignItems="flex-start" 
+          mb={{ xs: 2, sm: 3 }}
+          flexWrap="wrap"
+          gap={{ xs: 0.5, sm: 1 }}
+        >
           <Box flex={1}>
             <Box display="flex" alignItems="center" gap={1} mb={1}>
               <PowerSettingsNew 
@@ -323,12 +330,12 @@ export const DeviceCard: React.FC<DeviceCardProps> = ({ deviceId, name }) => {
             )}
           </Box>
 
-          <Box display="flex" flexDirection="column" alignItems="center" gap={1}>
+          <Box display="flex" flexDirection="column" alignItems="center" gap={{ xs: 0.5, sm: 1 }}>
             <Switch
               checked={device?.state === 'ON'}
               onChange={() => toggleDevice(device?.state === 'ON' ? 'OFF' : 'ON')}
-              size="medium"
               sx={{
+                transform: { xs: 'scale(0.8)', sm: 'scale(1)' },
                 '& .MuiSwitch-thumb': {
                   background: device?.state === 'ON' 
                     ? 'linear-gradient(45deg, #00E676, #00E5FF)'
@@ -336,7 +343,13 @@ export const DeviceCard: React.FC<DeviceCardProps> = ({ deviceId, name }) => {
                 }
               }}
             />
-            <Typography variant="caption" sx={{ fontWeight: 600, fontSize: '0.7rem' }}>
+            <Typography 
+              variant="caption" 
+              sx={{ 
+                fontWeight: 600, 
+                fontSize: { xs: '0.65rem', sm: '0.7rem' }
+              }}
+            >
               {device?.state || 'OFF'}
             </Typography>
           </Box>

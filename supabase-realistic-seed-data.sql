@@ -160,10 +160,10 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
--- Generate realistic data for 3 months
+-- Generate realistic data for 4 months (June, Sept, Oct, Nov)
 DO $$
 DECLARE
-  start_date DATE := '2025-09-01';  -- September
+  start_date DATE := '2024-06-01';  -- Start from June 2024
   end_date DATE := CURRENT_DATE - INTERVAL '1 day';
 BEGIN
   -- Living Room Light - frequent evening use
@@ -263,31 +263,43 @@ DROP FUNCTION generate_realistic_events(VARCHAR(255), VARCHAR(50), DATE, DATE);
 
 -- Show verification data
 SELECT 
-  'Total Events (Last 3 Months)' as metric,
+  'Total Events (Since June 2024)' as metric,
   COUNT(*)::text as value
 FROM device_events 
-WHERE created_at >= '2025-09-01'
+WHERE created_at >= '2024-06-01'
 UNION ALL
 SELECT 
   'Auto-Off Events' as metric,
   COUNT(*)::text as value
 FROM device_events 
-WHERE state = 'AUTO_OFF' AND created_at >= '2025-09-01'
+WHERE state = 'AUTO_OFF' AND created_at >= '2024-06-01'
 UNION ALL
 SELECT 
-  'October Events' as metric,
+  'June 2024 Events' as metric,
   COUNT(*)::text as value
 FROM device_events 
-WHERE created_at >= '2025-10-01' AND created_at < '2025-11-01'
+WHERE created_at >= '2024-06-01' AND created_at < '2024-07-01'
+UNION ALL
+SELECT 
+  'September 2024 Events' as metric,
+  COUNT(*)::text as value
+FROM device_events 
+WHERE created_at >= '2024-09-01' AND created_at < '2024-10-01'
+UNION ALL
+SELECT 
+  'October 2024 Events' as metric,
+  COUNT(*)::text as value
+FROM device_events 
+WHERE created_at >= '2024-10-01' AND created_at < '2024-11-01'
 UNION ALL
 SELECT 
   'Devices with Data' as metric,
   COUNT(DISTINCT device_id)::text as value
 FROM device_events 
-WHERE created_at >= '2025-09-01';
+WHERE created_at >= '2024-06-01';
 
 -- Show energy savings summary
-SELECT * FROM calculate_energy_savings('2025-09-01', CURRENT_DATE);
+SELECT * FROM calculate_energy_savings('2024-06-01', CURRENT_DATE);
 
 -- Show daily pattern sample (October first week)
 SELECT 
