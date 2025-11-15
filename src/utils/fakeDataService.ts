@@ -183,19 +183,20 @@ class FakeDataService {
   // Simulate real-time device state changes
   constructor() {
     this.startDeviceSimulation();
+    this.startAggressiveAutomation(); // New: More visible automation for demos
     // Generate massive historical data on first load
     setTimeout(() => this.generateMassiveHistoricalData(), 100);
   }
 
   private startDeviceSimulation() {
-    // Simulate device state changes every 30 seconds to 5 minutes
+    // Original simulation for background activity
     setInterval(() => {
       if (Math.random() > 0.7) { // 30% chance of state change
         const randomDevice = this.devices[Math.floor(Math.random() * this.devices.length)];
         const newState = randomDevice.state === 'ON' ? 'OFF' : 'ON';
         this.updateDeviceState(randomDevice.id, newState);
       }
-    }, 30000 + Math.random() * 270000); // 30s to 5min
+    }, 45000 + Math.random() * 180000); // 45s to 4min
 
     // Simulate occasional connection issues
     setInterval(() => {
@@ -212,9 +213,148 @@ class FakeDataService {
     }, 60000); // Check every minute
   }
 
-  private updateDeviceState(deviceId: string, newState: 'ON' | 'OFF') {
+  private startAggressiveAutomation() {
+    // More frequent automation for demo purposes - shows clients it's working
+    const automationPatterns = [
+      // Pattern 1: Turn off lights during daytime (energy saving)
+      () => {
+        const lights = this.devices.filter(d => d.type === 'light' && d.state === 'ON');
+        if (lights.length > 0 && new Date().getHours() >= 9 && new Date().getHours() <= 17) {
+          const light = lights[Math.floor(Math.random() * lights.length)];
+          this.updateDeviceState(light.id, 'OFF');
+          this.notifyListeners({
+            type: 'automation_triggered',
+            message: `AUTO-OFF: ${light.name} turned off (daylight detected)`,
+            device_id: light.id,
+            reason: 'Daylight Auto-Off'
+          });
+        }
+      },
+      // Pattern 2: Turn on devices based on usage patterns
+      () => {
+        const hour = new Date().getHours();
+        let targetDevices: FakeDevice[] = [];
+        
+        if (hour >= 18 && hour <= 22) { // Evening - turn on lights and entertainment
+          targetDevices = this.devices.filter(d => 
+            (d.type === 'light' || d.type === 'tv') && d.state === 'OFF'
+          );
+        } else if (hour >= 6 && hour <= 9) { // Morning - turn on essential devices
+          targetDevices = this.devices.filter(d => 
+            (d.type === 'light' && d.location.includes('Kitchen')) || 
+            (d.type === 'heater') && d.state === 'OFF'
+          );
+        } else if (hour >= 12 && hour <= 16) { // Afternoon - AC and fans
+          targetDevices = this.devices.filter(d => 
+            (d.type === 'ac' || d.type === 'fan') && d.state === 'OFF'
+          );
+        }
+        
+        if (targetDevices.length > 0) {
+          const device = targetDevices[Math.floor(Math.random() * targetDevices.length)];
+          this.updateDeviceState(device.id, 'ON');
+          this.notifyListeners({
+            type: 'automation_triggered',
+            message: `AUTO-ON: ${device.name} turned on (usage pattern detected)`,
+            device_id: device.id,
+            reason: 'Smart Schedule'
+          });
+        }
+      },
+      // Pattern 3: Energy optimization - turn off high-power devices
+      () => {
+        const highPowerDevices = this.devices.filter(d => 
+          d.powerRating > 500 && d.state === 'ON'
+        );
+        if (highPowerDevices.length > 2) { // If too many high power devices are on
+          const device = highPowerDevices[Math.floor(Math.random() * highPowerDevices.length)];
+          this.updateDeviceState(device.id, 'OFF');
+          this.notifyListeners({
+            type: 'automation_triggered',
+            message: `AUTO-OFF: ${device.name} turned off (energy optimization)`,
+            device_id: device.id,
+            reason: 'Energy Saver'
+          });
+        }
+      },
+      // Pattern 4: Motion-based simulation
+      () => {
+        // Simulate motion detection in random rooms
+        const rooms = ['Living Room', 'Kitchen', 'Bedroom', 'Bathroom'];
+        const activeRoom = rooms[Math.floor(Math.random() * rooms.length)];
+        
+        // Turn on lights in active room
+        const roomLights = this.devices.filter(d => 
+          d.type === 'light' && d.location === activeRoom && d.state === 'OFF'
+        );
+        if (roomLights.length > 0) {
+          const light = roomLights[0];
+          this.updateDeviceState(light.id, 'ON');
+          this.notifyListeners({
+            type: 'automation_triggered',
+            message: `AUTO-ON: ${light.name} turned on (motion detected)`,
+            device_id: light.id,
+            reason: 'Motion Sensor'
+          });
+        }
+        
+        // Turn off lights in other rooms (no motion)
+        const otherRoomLights = this.devices.filter(d => 
+          d.type === 'light' && d.location !== activeRoom && d.state === 'ON'
+        );
+        if (otherRoomLights.length > 0 && Math.random() > 0.7) {
+          const light = otherRoomLights[Math.floor(Math.random() * otherRoomLights.length)];
+          this.updateDeviceState(light.id, 'OFF');
+          this.notifyListeners({
+            type: 'automation_triggered',
+            message: `AUTO-OFF: ${light.name} turned off (no motion detected)`,
+            device_id: light.id,
+            reason: 'Motion Timeout'
+          });
+        }
+      }
+    ];
+
+    // Run automation patterns every 15-45 seconds for demo visibility
+    setInterval(() => {
+      const pattern = automationPatterns[Math.floor(Math.random() * automationPatterns.length)];
+      pattern();
+    }, 15000 + Math.random() * 30000); // 15-45 seconds
+
+    // Also run a specific pattern every 20 seconds for guaranteed activity
+    setInterval(() => {
+      // Guaranteed device toggle for demo - pick any device and toggle it
+      const activeDevices = this.devices.filter(d => d.state === 'ON');
+      const inactiveDevices = this.devices.filter(d => d.state === 'OFF');
+      
+      if (Math.random() > 0.5 && activeDevices.length > 0) {
+        // Turn something off
+        const device = activeDevices[Math.floor(Math.random() * activeDevices.length)];
+        this.updateDeviceState(device.id, 'OFF');
+        this.notifyListeners({
+          type: 'automation_triggered',
+          message: `AUTO-OFF: ${device.name} turned off (smart automation)`,
+          device_id: device.id,
+          reason: 'Smart Auto-Off'
+        });
+      } else if (inactiveDevices.length > 0) {
+        // Turn something on
+        const device = inactiveDevices[Math.floor(Math.random() * inactiveDevices.length)];
+        this.updateDeviceState(device.id, 'ON');
+        this.notifyListeners({
+          type: 'automation_triggered',
+          message: `AUTO-ON: ${device.name} turned on (smart automation)`,
+          device_id: device.id,
+          reason: 'Smart Schedule'
+        });
+      }
+    }, 20000); // Every 20 seconds - guaranteed activity
+  }
+
+  private updateDeviceState(deviceId: string, newState: 'ON' | 'OFF', isAutomated: boolean = false) {
     const device = this.devices.find(d => d.id === deviceId);
     if (device) {
+      const previousState = device.state;
       device.state = newState;
       device.lastChanged = new Date();
       
@@ -223,8 +363,21 @@ class FakeDataService {
         type: 'device_state_changed',
         device_id: deviceId,
         state: newState,
+        previous_state: previousState,
         timestamp: new Date().toISOString(),
-        device_name: device.name
+        device_name: device.name,
+        automated: isAutomated,
+        location: device.location,
+        power_rating: device.powerRating
+      });
+      
+      // Add to historical events for realism
+      this.historicalEvents.push({
+        id: `realtime_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+        device_id: deviceId,
+        state: isAutomated && newState === 'OFF' ? 'AUTO_OFF' : newState,
+        created_at: new Date().toISOString(),
+        duration: isAutomated ? Math.floor(Math.random() * 180) + 30 : undefined // 30-210 minutes
       });
     }
   }
@@ -246,7 +399,7 @@ class FakeDataService {
     const device = this.devices.find(d => d.id === deviceId);
     if (device) {
       const newState = device.state === 'ON' ? 'OFF' : 'ON';
-      this.updateDeviceState(deviceId, newState);
+      this.updateDeviceState(deviceId, newState, false); // Manual toggle, not automated
       return true;
     }
     return false;
@@ -495,31 +648,93 @@ class FakeDataService {
     };
   }
 
+  // Get recent automation activities (last 10)
+  getRecentAutomationActivities() {
+    const recentEvents = this.historicalEvents
+      .filter(event => {
+        const eventTime = new Date(event.created_at);
+        const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
+        return eventTime >= oneHourAgo;
+      })
+      .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+      .slice(0, 10);
+      
+    return recentEvents.map(event => {
+      const device = this.devices.find(d => d.id === event.device_id);
+      return {
+        id: event.id,
+        device_name: device?.name || 'Unknown Device',
+        device_location: device?.location || 'Unknown',
+        state: event.state,
+        timestamp: event.created_at,
+        is_automated: event.state === 'AUTO_OFF' || Math.random() > 0.5,
+        power_saved: event.state === 'AUTO_OFF' ? (device?.powerRating || 0) * 0.5 : 0
+      };
+    });
+  }
+
+  // Get automation statistics for today
+  getTodayAutomationStats() {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const tomorrow = new Date(today);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+
+    const todayEvents = this.historicalEvents.filter(event => {
+      const eventDate = new Date(event.created_at);
+      return eventDate >= today && eventDate < tomorrow;
+    });
+
+    const autoOffEvents = todayEvents.filter(e => e.state === 'AUTO_OFF').length;
+    const totalEvents = todayEvents.length;
+    const energySaved = autoOffEvents * 0.3; // Approximate kWh saved per auto-off
+    const moneySaved = energySaved * 6.5; // INR saved
+
+    return {
+      total_events: totalEvents,
+      auto_off_events: autoOffEvents,
+      manual_events: totalEvents - autoOffEvents,
+      energy_saved_kwh: Math.round(energySaved * 100) / 100,
+      money_saved_inr: Math.round(moneySaved * 100) / 100,
+      automation_efficiency: totalEvents > 0 ? Math.round((autoOffEvents / totalEvents) * 100) : 0
+    };
+  }
+
   // Simulate system notifications
   getSystemNotifications() {
+    const automationStats = this.getTodayAutomationStats();
+    
     return [
       {
         id: 1,
         type: 'info',
         title: 'Demo Mode Active',
-        message: 'You are viewing simulated data. Switch to Real Mode in settings to connect to hardware.',
+        message: 'You are viewing simulated data with live automation. Switch to Real Mode in settings to connect to hardware.',
         timestamp: new Date(),
         read: false
       },
       {
         id: 2,
         type: 'success',
-        title: 'Energy Saved',
-        message: 'Auto-off feature saved 2.3 kWh today (₹17.25)',
-        timestamp: new Date(Date.now() - 1000 * 60 * 60 * 2),
-        read: true
+        title: 'Energy Saved Today',
+        message: `Auto-off feature saved ${automationStats.energy_saved_kwh} kWh today (₹${automationStats.money_saved_inr})`,
+        timestamp: new Date(Date.now() - 1000 * 60 * 30),
+        read: false
       },
       {
         id: 3,
-        type: 'warning',
-        title: 'High Usage Alert',
-        message: 'Bedroom AC has been running for 4+ hours',
-        timestamp: new Date(Date.now() - 1000 * 60 * 60 * 6),
+        type: 'success',
+        title: 'Smart Automation Active',
+        message: `${automationStats.auto_off_events} devices auto-controlled today (${automationStats.automation_efficiency}% efficiency)`,
+        timestamp: new Date(Date.now() - 1000 * 60 * 60),
+        read: true
+      },
+      {
+        id: 4,
+        type: 'info',
+        title: 'Motion Detection',
+        message: 'Smart motion sensors controlling lights automatically',
+        timestamp: new Date(Date.now() - 1000 * 60 * 90),
         read: true
       }
     ];

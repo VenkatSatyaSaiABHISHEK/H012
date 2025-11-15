@@ -272,8 +272,80 @@ export const DataViewer: React.FC<DataViewerProps> = ({ open, onClose }) => {
 
         <Box sx={{ p: 3 }}>
           {loading && (
-            <Box display="flex" justifyContent="center" p={4}>
-              <CircularProgress />
+            <Box 
+              display="flex" 
+              flexDirection="column" 
+              alignItems="center" 
+              justifyContent="center" 
+              p={6}
+              sx={{
+                background: `linear-gradient(135deg, ${theme.palette.primary.main}10, ${theme.palette.secondary.main}10)`,
+                borderRadius: 3,
+                border: `1px solid ${theme.palette.divider}`
+              }}
+            >
+              <CircularProgress 
+                size={60} 
+                thickness={4}
+                sx={{ 
+                  mb: 3,
+                  color: theme.palette.primary.main,
+                  animation: 'spin 1s linear infinite',
+                  '@keyframes spin': {
+                    '0%': { transform: 'rotate(0deg)' },
+                    '100%': { transform: 'rotate(360deg)' }
+                  }
+                }} 
+              />
+              <Typography 
+                variant="h6" 
+                sx={{ 
+                  mb: 1,
+                  color: theme.palette.primary.main,
+                  fontWeight: 600,
+                  animation: 'pulse 2s infinite',
+                  '@keyframes pulse': {
+                    '0%': { opacity: 0.7 },
+                    '50%': { opacity: 1 },
+                    '100%': { opacity: 0.7 }
+                  }
+                }}
+              >
+                {isDemoMode ? 'Generating Demo Data...' : 'Loading Device Data...'}
+              </Typography>
+              <Typography 
+                variant="body2" 
+                color="text.secondary"
+                sx={{ textAlign: 'center', maxWidth: 300 }}
+              >
+                {isDemoMode 
+                  ? 'Creating realistic device history with usage patterns and energy calculations'
+                  : 'Fetching device events from Supabase database and calculating energy consumption'
+                }
+              </Typography>
+              <Box 
+                sx={{
+                  mt: 3,
+                  width: 200,
+                  height: 4,
+                  backgroundColor: theme.palette.grey[200],
+                  borderRadius: 2,
+                  overflow: 'hidden'
+                }}
+              >
+                <Box 
+                  sx={{
+                    width: '100%',
+                    height: '100%',
+                    background: `linear-gradient(90deg, ${theme.palette.primary.main}, ${theme.palette.secondary.main})`,
+                    animation: 'loadingBar 2s ease-in-out infinite',
+                    '@keyframes loadingBar': {
+                      '0%': { transform: 'translateX(-100%)' },
+                      '100%': { transform: 'translateX(100%)' }
+                    }
+                  }}
+                />
+              </Box>
             </Box>
           )}
 
@@ -313,100 +385,178 @@ export const DataViewer: React.FC<DataViewerProps> = ({ open, onClose }) => {
                 <Grid item xs={12} sm={3}>
                   <Card>
                     <CardContent sx={{ textAlign: 'center' }}>
-                      <Typography variant="h4" color="primary">{filteredData.length}</Typography>
-                      <Typography variant="body2">Total Records</Typography>
-                    </CardContent>
-                  </Card>
-                </Grid>
-                <Grid item xs={12} sm={3}>
-                  <Card>
-                    <CardContent sx={{ textAlign: 'center' }}>
-                      <Typography variant="h4" color="success.main">
-                        {filteredData.filter(r => r.state === 'ON').length}
-                      </Typography>
-                      <Typography variant="body2">ON Events</Typography>
-                    </CardContent>
-                  </Card>
-                </Grid>
-                <Grid item xs={12} sm={3}>
-                  <Card>
-                    <CardContent sx={{ textAlign: 'center' }}>
-                      <Typography variant="h4" color="warning.main">
-                        {(() => {
-                          // Calculate ACTUAL total runtime by pairing ON/OFF events
-                          let totalMinutes = 0;
-                          const sortedData = [...filteredData].sort((a, b) => 
-                            new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
-                          );
-                          
-                          const deviceSessions = new Map();
-                          
-                          sortedData.forEach(record => {
-                            if (record.state === 'ON') {
-                              // Find corresponding OFF event
-                              const offEvent = sortedData.find(r => 
-                                r.device_id === record.device_id && 
-                                r.state === 'OFF' &&
-                                new Date(r.created_at) > new Date(record.created_at)
-                              );
-                              
-                              if (offEvent) {
-                                const onTime = new Date(record.created_at);
-                                const offTime = new Date(offEvent.created_at);
-                                const duration = (offTime.getTime() - onTime.getTime()) / (1000 * 60);
-                                if (duration > 0 && duration < 1440) { // Valid session (< 24 hours)
-                                  totalMinutes += duration;
-                                }
+                      {loading ? (
+                        <Box>
+                          <CircularProgress size={24} sx={{ mb: 1 }} />
+                          <Typography variant="body2">Loading...</Typography>
+                        </Box>
+                      ) : (
+                        <>
+                          <Typography variant="h4" color="primary">
+                            <Box component="span" sx={{ 
+                              display: 'inline-block',
+                              animation: loading ? 'pulse 2s infinite' : 'none',
+                              '@keyframes pulse': {
+                                '0%': { opacity: 0.6 },
+                                '50%': { opacity: 1 },
+                                '100%': { opacity: 0.6 }
                               }
-                            }
-                          });
-                          
-                          return totalMinutes < 60 
-                            ? `${Math.round(totalMinutes)}m`
-                            : `${(totalMinutes / 60).toFixed(1)}h`;
-                        })()}
-                      </Typography>
-                      <Typography variant="body2">Total Runtime</Typography>
+                            }}>
+                              {filteredData.length}
+                            </Box>
+                          </Typography>
+                          <Typography variant="body2">Total Records</Typography>
+                        </>
+                      )}
                     </CardContent>
                   </Card>
                 </Grid>
                 <Grid item xs={12} sm={3}>
                   <Card>
                     <CardContent sx={{ textAlign: 'center' }}>
-                      <Typography variant="h4" color="error.main">
-                        {(() => {
-                          // Calculate ACTUAL cost based on real usage time
-                          let totalMinutes = 0;
-                          const sortedData = [...filteredData].sort((a, b) => 
-                            new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
-                          );
-                          
-                          sortedData.forEach(record => {
-                            if (record.state === 'ON') {
-                              const offEvent = sortedData.find(r => 
-                                r.device_id === record.device_id && 
-                                r.state === 'OFF' &&
-                                new Date(r.created_at) > new Date(record.created_at)
-                              );
-                              
-                              if (offEvent) {
-                                const onTime = new Date(record.created_at);
-                                const offTime = new Date(offEvent.created_at);
-                                const duration = (offTime.getTime() - onTime.getTime()) / (1000 * 60);
-                                if (duration > 0 && duration < 1440) {
-                                  totalMinutes += duration;
-                                }
+                      {loading ? (
+                        <Box>
+                          <CircularProgress size={24} sx={{ mb: 1, color: 'success.main' }} />
+                          <Typography variant="body2">Loading...</Typography>
+                        </Box>
+                      ) : (
+                        <>
+                          <Typography variant="h4" color="success.main">
+                            <Box component="span" sx={{ 
+                              display: 'inline-block',
+                              animation: 'countUp 0.5s ease-out',
+                              '@keyframes countUp': {
+                                '0%': { transform: 'scale(0.8)', opacity: 0 },
+                                '100%': { transform: 'scale(1)', opacity: 1 }
                               }
+                            }}>
+                              {filteredData.filter(r => r.state === 'ON').length}
+                            </Box>
+                          </Typography>
+                          <Typography variant="body2">ON Events</Typography>
+                        </>
+                      )}
+                    </CardContent>
+                  </Card>
+                </Grid>
+                <Grid item xs={12} sm={3}>
+                  <Card>
+                    <CardContent sx={{ textAlign: 'center' }}>
+                      {loading ? (
+                        <Box>
+                          <CircularProgress size={24} sx={{ mb: 1, color: 'warning.main' }} />
+                          <Typography variant="body2">Calculating...</Typography>
+                        </Box>
+                      ) : (
+                        <>
+                          <Typography variant="h4" color="warning.main">
+                            <Box component="span" sx={{ 
+                              display: 'inline-block',
+                              animation: 'slideInUp 0.6s ease-out',
+                              '@keyframes slideInUp': {
+                                '0%': { transform: 'translateY(20px)', opacity: 0 },
+                                '100%': { transform: 'translateY(0)', opacity: 1 }
+                              }
+                            }}>
+                              {(() => {
+                                // Calculate ACTUAL total runtime by pairing ON/OFF events
+                                let totalMinutes = 0;
+                                const sortedData = [...filteredData].sort((a, b) => 
+                                  new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+                                );
+                                
+                                const deviceSessions = new Map();
+                                
+                                sortedData.forEach(record => {
+                                  if (record.state === 'ON') {
+                                    // Find corresponding OFF event
+                                    const offEvent = sortedData.find(r => 
+                                      r.device_id === record.device_id && 
+                                      r.state === 'OFF' &&
+                                      new Date(r.created_at) > new Date(record.created_at)
+                                    );
+                                    
+                                    if (offEvent) {
+                                      const onTime = new Date(record.created_at);
+                                      const offTime = new Date(offEvent.created_at);
+                                      const duration = (offTime.getTime() - onTime.getTime()) / (1000 * 60);
+                                      if (duration > 0 && duration < 1440) { // Valid session (< 24 hours)
+                                        totalMinutes += duration;
+                                      }
+                                    }
+                                  }
+                                });
+                                
+                                return totalMinutes < 60 
+                                  ? `${Math.round(totalMinutes)}m`
+                                  : `${(totalMinutes / 60).toFixed(1)}h`;
+                              })()
                             }
-                          });
-                          
-                          const hours = totalMinutes / 60;
-                          const units = (hours * DEVICE_POWER_RATING) / 1000;
-                          const cost = units * COST_PER_KWH;
-                          return formatIndianCurrency(cost);
-                        })()}
-                      </Typography>
-                      <Typography variant="body2">Estimated Cost</Typography>
+                            </Box>
+                          </Typography>
+                          <Typography variant="body2">Total Runtime</Typography>
+                        </>
+                      )}
+                    </CardContent>
+                  </Card>
+                </Grid>
+                <Grid item xs={12} sm={3}>
+                  <Card>
+                    <CardContent sx={{ textAlign: 'center' }}>
+                      {loading ? (
+                        <Box>
+                          <CircularProgress size={24} sx={{ mb: 1, color: 'error.main' }} />
+                          <Typography variant="body2">Computing Cost...</Typography>
+                        </Box>
+                      ) : (
+                        <>
+                          <Typography variant="h4" color="error.main">
+                            <Box component="span" sx={{ 
+                              display: 'inline-block',
+                              animation: 'bounceIn 0.7s ease-out',
+                              '@keyframes bounceIn': {
+                                '0%': { transform: 'scale(0.3)', opacity: 0 },
+                                '50%': { transform: 'scale(1.05)' },
+                                '70%': { transform: 'scale(0.9)' },
+                                '100%': { transform: 'scale(1)', opacity: 1 }
+                              }
+                            }}>
+                              {(() => {
+                                // Calculate ACTUAL cost based on real usage time
+                                let totalMinutes = 0;
+                                const sortedData = [...filteredData].sort((a, b) => 
+                                  new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+                                );
+                                
+                                sortedData.forEach(record => {
+                                  if (record.state === 'ON') {
+                                    const offEvent = sortedData.find(r => 
+                                      r.device_id === record.device_id && 
+                                      r.state === 'OFF' &&
+                                      new Date(r.created_at) > new Date(record.created_at)
+                                    );
+                                    
+                                    if (offEvent) {
+                                      const onTime = new Date(record.created_at);
+                                      const offTime = new Date(offEvent.created_at);
+                                      const duration = (offTime.getTime() - onTime.getTime()) / (1000 * 60);
+                                      if (duration > 0 && duration < 1440) {
+                                        totalMinutes += duration;
+                                      }
+                                    }
+                                  }
+                                });
+                                
+                                const hours = totalMinutes / 60;
+                                const units = (hours * DEVICE_POWER_RATING) / 1000;
+                                const cost = units * COST_PER_KWH;
+                                return formatIndianCurrency(cost);
+                              })()}
+                            </Box>
+                          </Typography>
+                          <Typography variant="body2">Estimated Cost</Typography>
+                        </>
+                      )}
                     </CardContent>
                   </Card>
                 </Grid>
@@ -426,7 +576,64 @@ export const DataViewer: React.FC<DataViewerProps> = ({ open, onClose }) => {
                     </TableRow>
                   </TableHead>
                   <TableBody>
-                    {filteredData.map((record, index) => {
+                    {loading && (
+                      // Skeleton loader rows
+                      [...Array(8)].map((_, index) => (
+                        <TableRow key={`skeleton-${index}`}>
+                          {[...Array(6)].map((_, cellIndex) => (
+                            <TableCell key={cellIndex}>
+                              <Box 
+                                sx={{
+                                  height: 20,
+                                  backgroundColor: theme.palette.grey[200],
+                                  borderRadius: 1,
+                                  animation: `skeleton ${1 + cellIndex * 0.1}s ease-in-out infinite alternate`,
+                                  '@keyframes skeleton': {
+                                    '0%': { opacity: 0.4 },
+                                    '100%': { opacity: 0.8 }
+                                  }
+                                }}
+                              />
+                            </TableCell>
+                          ))}
+                        </TableRow>
+                      ))
+                    )}
+                    {!loading && filteredData.length === 0 && (
+                      <TableRow>
+                        <TableCell colSpan={6} sx={{ textAlign: 'center', py: 8 }}>
+                          <Box
+                            sx={{
+                              display: 'flex',
+                              flexDirection: 'column',
+                              alignItems: 'center',
+                              gap: 2,
+                              opacity: 0.7
+                            }}
+                          >
+                            <TableChart sx={{ fontSize: 48, color: theme.palette.grey[400] }} />
+                            <Typography variant="h6" color="text.secondary">
+                              {isDemoMode ? 'Generating demo data...' : 'No device data found'}
+                            </Typography>
+                            <Typography variant="body2" color="text.secondary" sx={{ maxWidth: 300, textAlign: 'center' }}>
+                              {isDemoMode 
+                                ? 'Demo data is being generated. This may take a moment.'
+                                : 'Try adjusting your filters or refresh the data to load device events.'
+                              }
+                            </Typography>
+                            <Button 
+                              variant="outlined" 
+                              onClick={fetchData}
+                              startIcon={<DateRange />}
+                              sx={{ mt: 1 }}
+                            >
+                              {isDemoMode ? 'Generate Data' : 'Refresh Data'}
+                            </Button>
+                          </Box>
+                        </TableCell>
+                      </TableRow>
+                    )}
+                    {!loading && filteredData.map((record, index) => {
                       // Calculate actual duration by finding the corresponding OFF event
                       let durationMinutes = 0;
                       let durationText = '—';
@@ -1100,8 +1307,20 @@ export const DataViewer: React.FC<DataViewerProps> = ({ open, onClose }) => {
       </DialogContent>
 
       <DialogActions>
-        <Button onClick={() => fetchData()} disabled={loading}>
-          Refresh Data
+        <Button 
+          onClick={() => fetchData()} 
+          disabled={loading}
+          startIcon={loading ? <CircularProgress size={16} /> : <DateRange />}
+          sx={{
+            minWidth: 140,
+            transition: 'all 0.3s ease',
+            '&:hover': {
+              transform: loading ? 'none' : 'translateY(-2px)',
+              boxShadow: loading ? 'none' : `0 4px 8px ${theme.palette.primary.main}30`
+            }
+          }}
+        >
+          {loading ? 'Loading...' : 'Refresh Data'}
         </Button>
         <Button onClick={onClose} variant="contained">
           Close

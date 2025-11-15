@@ -1,0 +1,431 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" lang="" xml:lang="">
+<head>
+  <meta charset="utf-8" />
+  <meta name="generator" content="pandoc" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
+  <title>Smart_Home_Automation_Documentation</title>
+  <style>
+    /* Default styles provided by pandoc.
+    ** See https://pandoc.org/MANUAL.html#variables-for-html for config info.
+    */
+    code{white-space: pre-wrap;}
+    span.smallcaps{font-variant: small-caps;}
+    div.columns{display: flex; gap: min(4vw, 1.5em);}
+    div.column{flex: auto; overflow-x: auto;}
+    div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+    /* The extra [class] is a hack that increases specificity enough to
+       override a similar rule in reveal.js */
+    ul.task-list[class]{list-style: none;}
+    ul.task-list li input[type="checkbox"] {
+      font-size: inherit;
+      width: 0.8em;
+      margin: 0 0.8em 0.2em -1.6em;
+      vertical-align: middle;
+    }
+    .display.math{display: block; text-align: center; margin: 0.5rem auto;}
+  </style>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/github-markdown-css/5.2.0/github-markdown-light.min.css" />
+</head>
+<body>
+<h1 id="smart-home-automation-system---user-guide">🏠 Smart Home
+Automation System - User Guide</h1>
+<h2 id="table-of-contents">Table of Contents</h2>
+<ol type="1">
+<li><a href="#overview">Overview</a></li>
+<li><a href="#dashboard-features">Dashboard Features</a></li>
+<li><a href="#device-management">Device Management</a></li>
+<li><a href="#analytics--graphs">Analytics &amp; Graphs</a></li>
+<li><a href="#data-monitoring">Data Monitoring</a></li>
+<li><a href="#auto-off-system">Auto-Off System</a></li>
+<li><a href="#energy-calculations">Energy Calculations</a></li>
+<li><a href="#mobile-support">Mobile Support</a></li>
+<li><a href="#demo-mode">Demo Mode</a></li>
+<li><a href="#technical-architecture">Technical Architecture</a></li>
+</ol>
+<hr />
+<h2 id="overview">Overview</h2>
+<p>Our Smart Home Automation System is a comprehensive web-based
+platform that allows you to monitor, control, and optimize your home’s
+energy consumption in real-time. The system integrates with ESP32
+microcontrollers and MQTT protocols to provide seamless device
+management and intelligent automation.</p>
+<h3 id="key-features">Key Features</h3>
+<ul>
+<li><strong>Real-time Device Monitoring</strong>: Track all connected
+devices instantly</li>
+<li><strong>Intelligent Auto-Off System</strong>: Automatically turn off
+devices to save energy</li>
+<li><strong>Comprehensive Analytics</strong>: Detailed graphs and
+statistics</li>
+<li><strong>Mobile-Responsive Design</strong>: Works perfectly on all
+devices</li>
+<li><strong>Demo Mode</strong>: Showcase functionality with realistic
+fake data</li>
+<li><strong>Energy Cost Calculations</strong>: Track savings and
+consumption costs</li>
+</ul>
+<hr />
+<h2 id="dashboard-features">Dashboard Features</h2>
+<h3 id="main-dashboard">🏠 Main Dashboard</h3>
+<p>The dashboard provides a complete overview of your smart home
+system:</p>
+<h4 id="system-status-cards">System Status Cards</h4>
+<ul>
+<li><strong>Connected Devices</strong>: Shows how many devices are
+currently online</li>
+<li><strong>Energy Saved</strong>: Real-time calculation of money saved
+through automation</li>
+<li><strong>Auto-Off Events</strong>: Number of devices automatically
+turned off today</li>
+<li><strong>Monthly Runtime</strong>: Total device operation time this
+month</li>
+</ul>
+<h4 id="live-device-grid">Live Device Grid</h4>
+<ul>
+<li><strong>Device Cards</strong>: Each connected device displays:
+<ul>
+<li>Device name and type (Light, Fan, TV, etc.)</li>
+<li>Current status (ON/OFF)</li>
+<li>Real-time power consumption</li>
+<li>Toggle switch for manual control</li>
+<li>Runtime information</li>
+</ul></li>
+</ul>
+<h4 id="smart-controls">Smart Controls</h4>
+<ul>
+<li><strong>Refresh Button</strong>: Update all device statuses</li>
+<li><strong>Device Manager</strong>: Add, remove, or configure
+devices</li>
+<li><strong>Settings</strong>: System configuration and preferences</li>
+</ul>
+<hr />
+<h2 id="device-management">Device Management</h2>
+<h3 id="device-types-supported">Device Types Supported</h3>
+<p>Our system supports various smart home devices:</p>
+<ol type="1">
+<li><strong>Lighting Systems</strong>
+<ul>
+<li>Smart LED bulbs</li>
+<li>LED strips</li>
+<li>Smart switches</li>
+</ul></li>
+<li><strong>Climate Control</strong>
+<ul>
+<li>Smart fans</li>
+<li>Air conditioners</li>
+<li>Heaters</li>
+</ul></li>
+<li><strong>Entertainment</strong>
+<ul>
+<li>Smart TVs</li>
+<li>Audio systems</li>
+<li>Gaming consoles</li>
+</ul></li>
+<li><strong>Kitchen Appliances</strong>
+<ul>
+<li>Smart refrigerators</li>
+<li>Microwaves</li>
+<li>Coffee makers</li>
+</ul></li>
+<li><strong>Security &amp; Monitoring</strong>
+<ul>
+<li>Smart cameras</li>
+<li>Motion sensors</li>
+<li>Door locks</li>
+</ul></li>
+</ol>
+<h3 id="device-configuration">Device Configuration</h3>
+<p>Each device can be configured with: - <strong>Custom Names</strong>:
+Personalize device names - <strong>Power Ratings</strong>: Set accurate
+wattage for calculations - <strong>Auto-Off Timers</strong>: Configure
+automatic shutdown times - <strong>Room Assignment</strong>: Organize
+devices by location</p>
+<hr />
+<h2 id="analytics-graphs">Analytics &amp; Graphs</h2>
+<h3 id="graphs-analytics-page">📊 Graphs &amp; Analytics Page</h3>
+<p>Comprehensive visualization of your energy data:</p>
+<h4 id="available-chart-types">Available Chart Types</h4>
+<ol type="1">
+<li><strong>Line Charts</strong>: Track consumption over time</li>
+<li><strong>Bar Charts</strong>: Compare device usage</li>
+<li><strong>Pie Charts</strong>: Show consumption distribution</li>
+<li><strong>Area Charts</strong>: Visualize usage patterns</li>
+</ol>
+<h4 id="data-insights">Data Insights</h4>
+<ul>
+<li><strong>Daily Patterns</strong>: See when devices are most
+active</li>
+<li><strong>Weekly Trends</strong>: Identify usage patterns throughout
+the week</li>
+<li><strong>Monthly Comparisons</strong>: Track long-term consumption
+changes</li>
+<li><strong>Device Rankings</strong>: Which devices consume the most
+energy</li>
+</ul>
+<h4 id="export-features">Export Features</h4>
+<ul>
+<li>Download charts as images</li>
+<li>Export data to CSV</li>
+<li>Generate consumption reports</li>
+</ul>
+<hr />
+<h2 id="data-monitoring">Data Monitoring</h2>
+<h3 id="data-viewer">📈 Data Viewer</h3>
+<p>Real-time monitoring of all system data:</p>
+<h4 id="live-data-streams">Live Data Streams</h4>
+<ul>
+<li><strong>Device Status Updates</strong>: Real-time ON/OFF states</li>
+<li><strong>Power Consumption</strong>: Live wattage readings</li>
+<li><strong>Network Status</strong>: MQTT connection health</li>
+<li><strong>System Performance</strong>: Response times and
+reliability</li>
+</ul>
+<h4 id="historical-data">Historical Data</h4>
+<ul>
+<li><strong>Event Logs</strong>: Complete history of device actions</li>
+<li><strong>Consumption Records</strong>: Historical power usage
+data</li>
+<li><strong>Auto-Off Events</strong>: Log of automatic shutdowns</li>
+<li><strong>System Alerts</strong>: Notifications and warnings</li>
+</ul>
+<hr />
+<h2 id="auto-off-system">Auto-Off System</h2>
+<h3 id="intelligent-automation">🤖 Intelligent Automation</h3>
+<p>Our smart auto-off system helps save energy automatically:</p>
+<h4 id="how-it-works">How It Works</h4>
+<ol type="1">
+<li><strong>Motion Detection</strong>: Devices turn off when no motion
+detected</li>
+<li><strong>Time-Based Rules</strong>: Automatic shutdown after set
+periods</li>
+<li><strong>Schedule-Based</strong>: Turn off devices at specific
+times</li>
+<li><strong>Smart Learning</strong>: Adapts to your usage patterns</li>
+</ol>
+<h4 id="configurable-settings">Configurable Settings</h4>
+<ul>
+<li><strong>Timeout Periods</strong>: Set custom auto-off delays</li>
+<li><strong>Room-Based Rules</strong>: Different settings per room</li>
+<li><strong>Device Priorities</strong>: Some devices never auto-off</li>
+<li><strong>Manual Overrides</strong>: Temporarily disable auto-off</li>
+</ul>
+<h4 id="energy-savings">Energy Savings</h4>
+<ul>
+<li><strong>Automatic Calculation</strong>: System calculates energy
+saved</li>
+<li><strong>Cost Tracking</strong>: Shows money saved in real
+currency</li>
+<li><strong>Monthly Reports</strong>: Detailed savings summaries</li>
+<li><strong>Environmental Impact</strong>: CO2 reduction
+calculations</li>
+</ul>
+<hr />
+<h2 id="energy-calculations">Energy Calculations</h2>
+<h3 id="how-we-calculate-your-savings">💰 How We Calculate Your
+Savings</h3>
+<h4 id="power-consumption-formula">Power Consumption Formula</h4>
+<pre><code>Power Consumption (kWh) = Device Wattage × Hours Used ÷ 1000</code></pre>
+<h4 id="cost-calculation">Cost Calculation</h4>
+<pre><code>Energy Cost = Power Consumption (kWh) × Electricity Rate (per kWh)</code></pre>
+<h4 id="savings-calculation">Savings Calculation</h4>
+<pre><code>Money Saved = (Auto-Off Hours × Device Wattage ÷ 1000) × Electricity Rate</code></pre>
+<h4 id="example-calculation">Example Calculation</h4>
+<ul>
+<li><strong>Device</strong>: 60W LED Bulb</li>
+<li><strong>Auto-Off Time</strong>: 3 hours daily</li>
+<li><strong>Electricity Rate</strong>: $0.12 per kWh</li>
+<li><strong>Daily Savings</strong>: (3 × 60 ÷ 1000) × $0.12 =
+$0.0216</li>
+<li><strong>Monthly Savings</strong>: $0.0216 × 30 = $0.648</li>
+<li><strong>Annual Savings</strong>: $0.648 × 12 = $7.78</li>
+</ul>
+<hr />
+<h2 id="mobile-support">Mobile Support</h2>
+<h3 id="responsive-design">📱 Responsive Design</h3>
+<p>Our system works perfectly on all devices:</p>
+<h4 id="mobile-features">Mobile Features</h4>
+<ul>
+<li><strong>Touch-Optimized Controls</strong>: Easy device
+switching</li>
+<li><strong>Responsive Layout</strong>: Adapts to screen size</li>
+<li><strong>Fast Loading</strong>: Optimized for mobile networks</li>
+<li><strong>Gesture Support</strong>: Swipe and tap interactions</li>
+</ul>
+<h4 id="tablet-support">Tablet Support</h4>
+<ul>
+<li><strong>Grid Layout</strong>: Multiple device cards visible</li>
+<li><strong>Split Screen</strong>: View multiple sections
+simultaneously</li>
+<li><strong>Portrait/Landscape</strong>: Works in both orientations</li>
+</ul>
+<h4 id="desktop-experience">Desktop Experience</h4>
+<ul>
+<li><strong>Full Dashboard</strong>: Complete overview on large
+screens</li>
+<li><strong>Multiple Windows</strong>: Open several sections at
+once</li>
+<li><strong>Keyboard Shortcuts</strong>: Quick navigation and
+controls</li>
+</ul>
+<hr />
+<h2 id="demo-mode">Demo Mode</h2>
+<h3 id="showcase-features">🎭 Showcase Features</h3>
+<p>Perfect for demonstrations and testing:</p>
+<h4 id="demo-mode-features">Demo Mode Features</h4>
+<ul>
+<li><strong>Realistic Data</strong>: 16 fake devices with authentic
+behavior</li>
+<li><strong>Historical Data</strong>: 1000+ events for comprehensive
+testing</li>
+<li><strong>Live Simulations</strong>: Devices appear to respond in
+real-time</li>
+<li><strong>Guest-Friendly</strong>: No setup required for
+demonstrations</li>
+</ul>
+<h4 id="how-to-access-demo-mode">How to Access Demo Mode</h4>
+<ol type="1">
+<li><strong>Settings Menu</strong>: Click the settings gear icon</li>
+<li><strong>Enter Password</strong>: Use the demo password
+(protected)</li>
+<li><strong>Instant Switch</strong>: System immediately shows demo
+data</li>
+<li><strong>24-Hour Session</strong>: Stays active for full day</li>
+</ol>
+<h4 id="demo-devices-include">Demo Devices Include</h4>
+<ul>
+<li>Living Room TV (120W)</li>
+<li>Bedroom Fan (75W)</li>
+<li>Kitchen Light (40W)</li>
+<li>Office AC (1500W)</li>
+<li>Smart Fridge (150W)</li>
+<li>Gaming Console (200W)</li>
+<li>And 10 more realistic devices!</li>
+</ul>
+<hr />
+<h2 id="technical-architecture">Technical Architecture</h2>
+<h3 id="system-components">🔧 System Components</h3>
+<h4 id="frontend-technology">Frontend Technology</h4>
+<ul>
+<li><strong>React.js</strong>: Modern web application framework</li>
+<li><strong>TypeScript</strong>: Type-safe JavaScript</li>
+<li><strong>Material-UI</strong>: Professional UI components</li>
+<li><strong>Responsive Design</strong>: Mobile-first approach</li>
+</ul>
+<h4 id="backend-integration">Backend Integration</h4>
+<ul>
+<li><strong>MQTT Protocol</strong>: Real-time device communication</li>
+<li><strong>WebSocket</strong>: Live data streaming</li>
+<li><strong>REST APIs</strong>: Data management</li>
+<li><strong>Supabase</strong>: Cloud database and authentication</li>
+</ul>
+<h4 id="hardware-integration">Hardware Integration</h4>
+<ul>
+<li><strong>ESP32 Microcontrollers</strong>: Device connectivity</li>
+<li><strong>WiFi Communication</strong>: Wireless device control</li>
+<li><strong>Sensor Integration</strong>: Motion and environmental
+sensors</li>
+<li><strong>Smart Relays</strong>: Device switching and control</li>
+</ul>
+<h4 id="data-management">Data Management</h4>
+<ul>
+<li><strong>Real-time Database</strong>: Instant data
+synchronization</li>
+<li><strong>Historical Storage</strong>: Long-term data retention</li>
+<li><strong>Backup Systems</strong>: Data protection and recovery</li>
+<li><strong>Analytics Engine</strong>: Consumption pattern analysis</li>
+</ul>
+<hr />
+<h2 id="getting-started">Getting Started</h2>
+<h3 id="quick-setup-guide">🚀 Quick Setup Guide</h3>
+<ol type="1">
+<li><strong>Access the System</strong>
+<ul>
+<li>Open your web browser</li>
+<li>Navigate to the home automation dashboard</li>
+<li>System works on any device with internet</li>
+</ul></li>
+<li><strong>Explore Features</strong>
+<ul>
+<li><strong>Dashboard</strong>: Main overview of all devices</li>
+<li><strong>Analytics</strong>: Detailed consumption graphs</li>
+<li><strong>Data Viewer</strong>: Real-time monitoring</li>
+<li><strong>Settings</strong>: System configuration</li>
+</ul></li>
+<li><strong>Try Demo Mode</strong>
+<ul>
+<li>Click settings icon</li>
+<li>Enter demo password</li>
+<li>Explore with realistic fake data</li>
+<li>Perfect for learning the system</li>
+</ul></li>
+</ol>
+<h3 id="tips-for-best-experience">💡 Tips for Best Experience</h3>
+<ul>
+<li><strong>Regular Monitoring</strong>: Check dashboard daily</li>
+<li><strong>Customize Settings</strong>: Adjust auto-off timers</li>
+<li><strong>Review Analytics</strong>: Monitor monthly patterns</li>
+<li><strong>Update Device Names</strong>: Use descriptive names</li>
+<li><strong>Enable Notifications</strong>: Stay informed of system
+status</li>
+</ul>
+<hr />
+<h2 id="support-maintenance">Support &amp; Maintenance</h2>
+<h3 id="system-health">📞 System Health</h3>
+<p>The system includes comprehensive health monitoring: -
+<strong>Connection Status</strong>: MQTT and database connectivity -
+<strong>Device Response</strong>: Individual device health checks -
+<strong>Performance Metrics</strong>: System speed and reliability -
+<strong>Error Logging</strong>: Automatic issue detection</p>
+<h3 id="regular-updates">🔄 Regular Updates</h3>
+<ul>
+<li><strong>Automatic Updates</strong>: System updates itself</li>
+<li><strong>Feature Additions</strong>: New capabilities added
+regularly</li>
+<li><strong>Security Patches</strong>: Continuous security
+improvements</li>
+<li><strong>Performance Optimizations</strong>: Faster, more efficient
+operation</li>
+</ul>
+<hr />
+<h2 id="conclusion">Conclusion</h2>
+<p>This Smart Home Automation System represents the future of
+intelligent home management. With its comprehensive monitoring,
+intelligent automation, and user-friendly interface, it provides
+everything needed to create an efficient, cost-effective, and
+environmentally friendly smart home.</p>
+<p>The system’s combination of real-time monitoring, predictive
+automation, and detailed analytics makes it an invaluable tool for
+modern homeowners who want to take control of their energy consumption
+while enjoying the convenience of automated device management.</p>
+<hr />
+<p><em>Document Version: 1.0</em><br />
+<em>Last Updated: November 14, 2025</em><br />
+<em>System Version: Latest</em></p>
+<hr />
+<h2 id="quick-reference">📋 Quick Reference</h2>
+<h3 id="key-statistics-dashboard-shows">Key Statistics Dashboard
+Shows:</h3>
+<ul>
+<li><strong>Connected Devices</strong>: Real-time device count</li>
+<li><strong>Energy Saved</strong>: Automatic savings calculation</li>
+<li><strong>Auto-Off Events</strong>: Daily automation actions</li>
+<li><strong>Monthly Runtime</strong>: Total device operation time</li>
+</ul>
+<h3 id="main-navigation">Main Navigation:</h3>
+<ul>
+<li><strong>🏠 Dashboard</strong>: Main system overview</li>
+<li><strong>📊 Analytics</strong>: Graphs and detailed analysis</li>
+<li><strong>📈 Data Viewer</strong>: Real-time monitoring</li>
+<li><strong>⚙️ Settings</strong>: System configuration</li>
+</ul>
+<h3 id="emergency-controls">Emergency Controls:</h3>
+<ul>
+<li><strong>Manual Override</strong>: Disable all automation</li>
+<li><strong>System Refresh</strong>: Update all device statuses</li>
+<li><strong>Demo Mode</strong>: Switch to demonstration data</li>
+<li><strong>Reset Settings</strong>: Return to default
+configuration</li>
+</ul>
+</body>
+</html>

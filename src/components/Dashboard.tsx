@@ -76,6 +76,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ toggleTheme }) => {
   // Demo mode state
   const [demoDevices, setDemoDevices] = React.useState(fakeDataService.getDevices());
   const [demoStats, setDemoStats] = React.useState(fakeDataService.getStats());
+  const [automationActivity, setAutomationActivity] = React.useState(fakeDataService.getRecentAutomationActivities());
+  const [lastAutomationUpdate, setLastAutomationUpdate] = React.useState(new Date());
   
   // Use demo or real data based on mode
   const currentDevices = isDemoMode ? demoDevices.map(d => ({
@@ -112,14 +114,22 @@ export const Dashboard: React.FC<DashboardProps> = ({ toggleTheme }) => {
         if (event.type === 'device_state_changed') {
           setDemoDevices(fakeDataService.getDevices());
           setDemoStats(fakeDataService.getStats());
+          setAutomationActivity(fakeDataService.getRecentAutomationActivities());
+          setLastAutomationUpdate(new Date());
+        }
+        if (event.type === 'automation_triggered') {
+          // Show real-time automation notifications
+          setLastAutomationUpdate(new Date());
+          setAutomationActivity(fakeDataService.getRecentAutomationActivities());
         }
       });
       
-      // Update demo data every 30 seconds
+      // Update demo data every 15 seconds for more responsive automation display
       const interval = setInterval(() => {
         setDemoDevices(fakeDataService.getDevices());
         setDemoStats(fakeDataService.getStats());
-      }, 30000);
+        setAutomationActivity(fakeDataService.getRecentAutomationActivities());
+      }, 15000);
       
       return () => {
         unsubscribe();
@@ -754,6 +764,212 @@ export const Dashboard: React.FC<DashboardProps> = ({ toggleTheme }) => {
               />
             </Grid>
           </Grid>
+
+          {/* Live Automation Activity - Only in demo mode */}
+          {isDemoMode && !showDiagnostics && (
+            <Box mt={3}>
+              <Paper 
+                sx={{ 
+                  p: { xs: 2, sm: 3 }, 
+                  background: `linear-gradient(135deg, ${theme.palette.success.main}20, ${theme.palette.primary.main}10)`,
+                  border: `1px solid ${theme.palette.success.main}30`,
+                  borderRadius: 3
+                }}
+              >
+                <Box display="flex" alignItems="center" justifyContent="space-between" mb={2}>
+                  <Box display="flex" alignItems="center" gap={1}>
+                    <Box
+                      sx={{
+                        width: 12,
+                        height: 12,
+                        borderRadius: '50%',
+                        backgroundColor: theme.palette.success.main,
+                        animation: 'pulse 2s infinite',
+                        '@keyframes pulse': {
+                          '0%': { transform: 'scale(1)', opacity: 1 },
+                          '50%': { transform: 'scale(1.2)', opacity: 0.7 },
+                          '100%': { transform: 'scale(1)', opacity: 1 }
+                        }
+                      }}
+                    />
+                    <Typography 
+                      variant="h6" 
+                      sx={{ 
+                        fontWeight: 600,
+                        fontSize: { xs: '1rem', sm: '1.25rem' }
+                      }}
+                    >
+                      🤖 Live Smart Automation
+                    </Typography>
+                  </Box>
+                  <Chip 
+                    label="ACTIVE" 
+                    color="success" 
+                    size="small"
+                    sx={{ 
+                      fontWeight: 600,
+                      fontSize: '0.7rem',
+                      animation: 'glow 3s infinite',
+                      '@keyframes glow': {
+                        '0%, 100%': { boxShadow: `0 0 5px ${theme.palette.success.main}40` },
+                        '50%': { boxShadow: `0 0 20px ${theme.palette.success.main}60` }
+                      }
+                    }}
+                  />
+                </Box>
+                
+                <Typography 
+                  variant="body2" 
+                  color="text.secondary" 
+                  sx={{ mb: 2, fontSize: { xs: '0.8rem', sm: '0.875rem' } }}
+                >
+                  Smart system automatically controlling devices based on motion, schedules, and energy optimization.
+                </Typography>
+
+                {/* Recent Activity List */}
+                <Box sx={{ maxHeight: 200, overflowY: 'auto' }}>
+                  {automationActivity.slice(0, 5).map((activity, index) => {
+                    const timeAgo = Math.floor((Date.now() - new Date(activity.timestamp).getTime()) / 60000);
+                    const isRecent = timeAgo < 5;
+                    
+                    return (
+                      <Box 
+                        key={activity.id}
+                        sx={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 2,
+                          p: 1.5,
+                          mb: 1,
+                          backgroundColor: isRecent ? theme.palette.success.main + '15' : 'transparent',
+                          borderRadius: 2,
+                          border: isRecent ? `1px solid ${theme.palette.success.main}30` : '1px solid transparent',
+                          transition: 'all 0.3s ease'
+                        }}
+                      >
+                        <Avatar 
+                          sx={{ 
+                            width: 32, 
+                            height: 32,
+                            fontSize: '0.8rem',
+                            backgroundColor: activity.state === 'AUTO_OFF' || activity.is_automated 
+                              ? theme.palette.warning.main 
+                              : theme.palette.success.main
+                          }}
+                        >
+                          {activity.state === 'AUTO_OFF' || (activity.is_automated && activity.state === 'OFF') ? '⚡' : '🔌'}
+                        </Avatar>
+                        
+                        <Box flex={1}>
+                          <Typography 
+                            variant="body2" 
+                            sx={{ 
+                              fontWeight: 500,
+                              fontSize: { xs: '0.75rem', sm: '0.825rem' }
+                            }}
+                          >
+                            {activity.device_name}
+                          </Typography>
+                          <Typography 
+                            variant="caption" 
+                            color="text.secondary"
+                            sx={{ fontSize: { xs: '0.65rem', sm: '0.7rem' } }}
+                          >
+                            {activity.device_location} • {activity.state === 'AUTO_OFF' ? 'Auto turned OFF' : 
+                             activity.is_automated ? 'Auto turned ON' : 
+                             activity.state === 'ON' ? 'Turned ON' : 'Turned OFF'}
+                          </Typography>
+                        </Box>
+                        
+                        <Box textAlign="right">
+                          <Typography 
+                            variant="caption" 
+                            color="text.secondary"
+                            sx={{ fontSize: { xs: '0.6rem', sm: '0.65rem' } }}
+                          >
+                            {timeAgo === 0 ? 'Just now' : 
+                             timeAgo === 1 ? '1 min ago' : 
+                             timeAgo < 60 ? `${timeAgo} mins ago` : '1+ hrs ago'}
+                          </Typography>
+                          {activity.power_saved > 0 && (
+                            <Typography 
+                              variant="caption" 
+                              color="success.main"
+                              sx={{ 
+                                display: 'block',
+                                fontWeight: 600,
+                                fontSize: { xs: '0.6rem', sm: '0.65rem' }
+                              }}
+                            >
+                              ₹{(activity.power_saved * 6.5 / 1000).toFixed(2)} saved
+                            </Typography>
+                          )}
+                        </Box>
+                      </Box>
+                    );
+                  })}
+                </Box>
+                
+                {/* Quick Stats */}
+                <Box 
+                  display="flex" 
+                  justifyContent="space-around" 
+                  mt={2} 
+                  pt={2} 
+                  borderTop={`1px solid ${theme.palette.divider}`}
+                >
+                  <Box textAlign="center">
+                    <Typography 
+                      variant="h6" 
+                      color="primary.main" 
+                      sx={{ fontWeight: 700, fontSize: { xs: '1rem', sm: '1.25rem' } }}
+                    >
+                      {fakeDataService.getTodayAutomationStats().auto_off_events}
+                    </Typography>
+                    <Typography 
+                      variant="caption" 
+                      color="text.secondary"
+                      sx={{ fontSize: { xs: '0.65rem', sm: '0.7rem' } }}
+                    >
+                      Auto Actions Today
+                    </Typography>
+                  </Box>
+                  <Box textAlign="center">
+                    <Typography 
+                      variant="h6" 
+                      color="success.main" 
+                      sx={{ fontWeight: 700, fontSize: { xs: '1rem', sm: '1.25rem' } }}
+                    >
+                      {fakeDataService.getTodayAutomationStats().automation_efficiency}%
+                    </Typography>
+                    <Typography 
+                      variant="caption" 
+                      color="text.secondary"
+                      sx={{ fontSize: { xs: '0.65rem', sm: '0.7rem' } }}
+                    >
+                      Efficiency
+                    </Typography>
+                  </Box>
+                  <Box textAlign="center">
+                    <Typography 
+                      variant="h6" 
+                      color="warning.main" 
+                      sx={{ fontWeight: 700, fontSize: { xs: '1rem', sm: '1.25rem' } }}
+                    >
+                      ₹{fakeDataService.getTodayAutomationStats().money_saved_inr}
+                    </Typography>
+                    <Typography 
+                      variant="caption" 
+                      color="text.secondary"
+                      sx={{ fontSize: { xs: '0.65rem', sm: '0.7rem' } }}
+                    >
+                      Saved Today
+                    </Typography>
+                  </Box>
+                </Box>
+              </Paper>
+            </Box>
+          )}
 
           {/* System Status Overview - Always show the service cards */}
           {!showDiagnostics && (
